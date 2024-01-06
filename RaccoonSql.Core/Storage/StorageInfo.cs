@@ -1,9 +1,8 @@
-namespace RaccoonSql.Core.Storage.FileSystem;
+namespace RaccoonSql.Core.Storage;
 
-internal class FileSystemStorageInfo : IStorageInfo
+internal class StorageInfo : IStorageInfo
 {
     public bool Exists => ChunkInfo is not null;
     public required string CollectionName { get; init; }
     public required ChunkInfo? ChunkInfo { get; init; }
-    public required Guid Id { get; init; }
 }

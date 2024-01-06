@@ -46,4 +46,6 @@ public interface IModelSet<TData> where TData : IModel
         Remove(id, conflictBehavior);
         return Task.CompletedTask;
     }
+
+    IEnumerable<TData> Where(Func<TData, bool> predicate);
 }

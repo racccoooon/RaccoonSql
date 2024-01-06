@@ -5,6 +5,8 @@ namespace RaccoonSql.Core.Storage;
 [PublicAPI]
 public interface IStorageEngine
 {
+    IEnumerable<IStorageInfo> QueryStorageInfo(string collectionName);
+    
     IStorageInfo GetStorageInfo(string collectionName, Guid id);
     
     Task<IStorageInfo> GetStorageInfoAsync(string collectionName, Guid id, CancellationToken cancellationToken = default) 

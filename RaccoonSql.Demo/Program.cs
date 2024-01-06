@@ -1,12 +1,13 @@
-﻿using RaccoonSql.Core;
-using RaccoonSql.Core.Serialization.Json;
-using RaccoonSql.Core.Storage.FileSystem;
+﻿using Humanizer;
+using RaccoonSql.Core;
+using RaccoonSql.Core.Persistance.FileSystem;
+using RaccoonSql.Core.Storage;
 using RaccoonSql.Demo.Models;
 
-var fileSystemStorageEngineOptions = new FileSystemStorageEngineOptions
+var fileSystemStorageEngineOptions = new StorageEngineOptions
 {
     StoragePath = "/",
-    SerializationEngineFactory = new JsonSerializationEngineFactory(),
+    PersistenceProviderFactory = new FileSystemPersistenceEngineFactory(),
 };
 var modelStoreOptions = new ModelStoreOptions
 {
@@ -15,26 +16,21 @@ var modelStoreOptions = new ModelStoreOptions
     DefaultUpdateConflictBehavior = ConflictBehavior.Ignore,
     FindDefaultConflictBehavior = ConflictBehavior.Ignore,
 };
-var modelStore = new ModelStore(modelStoreOptions, new FileSystemStorageEngineFactory(fileSystemStorageEngineOptions));
+var modelStore = new ModelStore(modelStoreOptions, new StorageEngineFactory(fileSystemStorageEngineOptions));
 
 var persons = modelStore.Set<PersonModel>();
 
-var person = persons.Find(Guid.Parse("4C870818-4EB7-4DBB-B37C-0A9622291841"));
-
-var newPerson = new PersonModel
+persons.Insert(new PersonModel()
 {
-    Birthday = DateOnly.FromDateTime(DateTime.Now),
-};
+    Birthday = DateOnly.FromDateTime(new DateTime(1994, 12, 16)),
+});
 
-persons.Insert(newPerson);
-
-var fetchPerson = persons.Find(newPerson.Id);
-if (fetchPerson is not null) {
-    persons.Remove(fetchPerson.Id);
-}
-
-if (person is not null)
+persons.Insert(new PersonModel()
 {
-    person.Birthday = DateOnly.MaxValue;
-    persons.Update(person);
-}
+    Birthday = DateOnly.FromDateTime(new DateTime(1996, 9, 11)),
+});
+
+var all = persons.Where(x => x.Birthday.Year < 1995)
+    .ToList();
+    
+Console.WriteLine(all.Humanize());

@@ -1,4 +1,4 @@
-namespace RaccoonSql.Core.Storage.FileSystem;
+namespace RaccoonSql.Core.Storage;
 
 internal class ModelIndex
 {

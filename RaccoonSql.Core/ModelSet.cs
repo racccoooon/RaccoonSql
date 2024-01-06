@@ -66,4 +66,12 @@ internal class ModelSet<TData>
             throw new IdNotFoundException(typeof(TData), id);
         _storageEngine.Delete(storageInfo);
     }
+
+    public IEnumerable<TData> Where(Func<TData, bool> predicate)
+    {
+        return _storageEngine.QueryStorageInfo(SetName)
+            .Select(x => _storageEngine.Read(x))
+            .Cast<TData>()
+            .Where(predicate);
+    }
 }

@@ -1,8 +1,9 @@
+using System.Collections;
 using System.Diagnostics;
 
-namespace RaccoonSql.Core.Storage.FileSystem;
+namespace RaccoonSql.Core.Storage;
 
-internal class ModelCollectionChunk
+internal class ModelCollectionChunk : IEnumerable<IModel>
 {
     private List<IModel> _models = new();
     private int _count = 0;
@@ -39,5 +40,15 @@ internal class ModelCollectionChunk
         Debug.Assert(offset < _models.Count, "offset < _models.Count");
         _models[offset] = _models[_count - 1];
         _count--;
+    }
+
+    public IEnumerator<IModel> GetEnumerator()
+    {
+        return _models.GetEnumerator();
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
     }
 }
