@@ -1,0 +1,1 @@
+global using ChunkInfo = (int chunkId, int offset);

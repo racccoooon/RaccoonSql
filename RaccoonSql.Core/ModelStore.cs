@@ -16,6 +16,6 @@ public class ModelStore(
     
     public IModelSet<TData> Set<TData>(string? setName = null) where TData : IModel
     {
-        return new ModelSet<TData>(StorageEngine, options);
+        return new ModelSet<TData>(setName, StorageEngine, options);
     }
 }

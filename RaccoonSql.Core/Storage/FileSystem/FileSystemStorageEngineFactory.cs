@@ -6,6 +6,6 @@ public class FileSystemStorageEngineFactory(
 {
     public IStorageEngine Create()
     {
-        throw new NotImplementedException();
+        return new FileSystemStorageEngine();
     }
 }

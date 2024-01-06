@@ -5,22 +5,22 @@ namespace RaccoonSql.Core.Storage;
 [PublicAPI]
 public interface IStorageEngine
 {
-    IStorageInfo GetStorageInfo(Type type, Guid id);
+    IStorageInfo GetStorageInfo(string collectionName, Guid id);
     
-    Task<IStorageInfo> GetStorageInfoAsync(Type type, Guid id, CancellationToken cancellationToken = default) 
-        => Task.FromResult(GetStorageInfo(type, id));
+    Task<IStorageInfo> GetStorageInfoAsync(string collectionName, Guid id, CancellationToken cancellationToken = default) 
+        => Task.FromResult(GetStorageInfo(collectionName, id));
 
-    void Write(IStorageInfo storageInfo, object data);
+    void Write(IStorageInfo storageInfo, IModel model);
     
-    Task WriteAsync(IStorageInfo storageInfo, object data, CancellationToken cancellationToken = default)
+    Task WriteAsync(IStorageInfo storageInfo, IModel model, CancellationToken cancellationToken = default)
     {
-        Write(storageInfo, data);
+        Write(storageInfo, model);
         return Task.CompletedTask;
     }
     
-    object Read(IStorageInfo storageInfo);
+    IModel Read(IStorageInfo storageInfo);
     
-    Task<object> ReadAsync(IStorageInfo storageInfo, CancellationToken cancellationToken = default)
+    Task<IModel> ReadAsync(IStorageInfo storageInfo, CancellationToken cancellationToken = default)
         => Task.FromResult(Read(storageInfo));
     
     void Delete(IStorageInfo storageInfo);
