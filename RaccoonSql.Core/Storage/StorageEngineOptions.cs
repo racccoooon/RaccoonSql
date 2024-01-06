@@ -1,9 +1,8 @@
-using RaccoonSql.Core.Persistance;
+using RaccoonSql.Core.Storage.Persistence;
 
 namespace RaccoonSql.Core.Storage;
 
 public record StorageEngineOptions
 {
-    public required string StoragePath { get; init; }
-    public IPersistenceEngineFactory? PersistenceProviderFactory { get; init; }
+    public required IPersistenceEngineFactory PersistenceProviderFactory { get; init; }
 }

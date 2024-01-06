@@ -1,23 +1,24 @@
 namespace RaccoonSql.Core.Storage;
 
-internal class ModelIndex
+public class ModelIndex
 {
-    private readonly Dictionary<Guid, ChunkInfo> _index = new();
+    public Dictionary<Guid, ChunkInfo> Index { get; set; } = new();
+    public int ChunkCount { get; set; } = 16;
 
     public ChunkInfo? GetChunkInfo(Guid id)
     {
-        if (!_index.TryGetValue(id, out var chunkInfo))
+        if (!Index.TryGetValue(id, out var chunkInfo))
             return null;
         return chunkInfo;
     }
 
     public void Delete(Guid modelId)
     {
-        _index.Remove(modelId);
+        Index.Remove(modelId);
     }
 
-    public void Add(Guid modelId, ChunkInfo chunkInfo)
+    public void Set(Guid modelId, ChunkInfo chunkInfo)
     {
-        _index[modelId] = chunkInfo;
+        Index[modelId] = chunkInfo;
     }
 }

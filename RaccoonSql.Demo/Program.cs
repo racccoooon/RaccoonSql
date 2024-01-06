@@ -1,13 +1,20 @@
-﻿using Humanizer;
+﻿using System.IO.Abstractions;
+using Humanizer;
 using RaccoonSql.Core;
-using RaccoonSql.Core.Persistance.FileSystem;
+using RaccoonSql.Core.Serialization.Json;
 using RaccoonSql.Core.Storage;
+using RaccoonSql.Core.Storage.Persistence.FileSystem;
 using RaccoonSql.Demo.Models;
 
+var persistenceOptions = new FileSystemPersistenceOptions
+{
+    FileSystem = new FileSystem(),
+    SerializationEngineFactory = new JsonSerializationEngineFactory(),
+    Path = "TestDB",
+};
 var fileSystemStorageEngineOptions = new StorageEngineOptions
 {
-    StoragePath = "/",
-    PersistenceProviderFactory = new FileSystemPersistenceEngineFactory(),
+    PersistenceProviderFactory = new FileSystemPersistenceEngineFactory(persistenceOptions),
 };
 var modelStoreOptions = new ModelStoreOptions
 {
@@ -32,5 +39,5 @@ persons.Insert(new PersonModel()
 
 var all = persons.Where(x => x.Birthday.Year < 1995)
     .ToList();
-    
+
 Console.WriteLine(all.Humanize());

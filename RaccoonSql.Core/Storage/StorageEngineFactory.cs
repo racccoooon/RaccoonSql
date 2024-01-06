@@ -6,6 +6,6 @@ public class StorageEngineFactory(
 {
     public IStorageEngine Create()
     {
-        return new StorageEngine();
+        return new StorageEngine(options.PersistenceProviderFactory.Create());
     }
 }

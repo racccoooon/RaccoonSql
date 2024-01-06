@@ -6,13 +6,13 @@ namespace RaccoonSql.Serialization.MemoryPack;
 
 public class MemoryPackSerializationEngine : ISerializationEngine
 {
-    public Stream Serialize<TData>(TData data) where TData : IModel
+    public Stream Serialize<TData>(TData data)
     {
         var bytes = MemoryPackSerializer.Serialize(typeof(TData), data);
         return new MemoryStream(bytes);
     }
 
-    public TData Deserialize<TData>(Stream stream) where TData : IModel
+    public TData Deserialize<TData>(Stream stream)
     {
         var ms = new MemoryStream();
         stream.CopyTo(ms);

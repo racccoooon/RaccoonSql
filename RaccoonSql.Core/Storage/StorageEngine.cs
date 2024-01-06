@@ -1,21 +1,19 @@
 using System.Diagnostics;
+using RaccoonSql.Core.Storage.Persistence;
 
 namespace RaccoonSql.Core.Storage;
 
-internal class StorageEngine : IStorageEngine
+internal class StorageEngine(
+    IPersistenceEngine persistenceEngine) 
+    : IStorageEngine
 {
     private readonly Dictionary<string, ModelCollection> _collections = new();
 
-    public StorageEngine()
-    {
-        //TODO: load from file system
-    }
-    
     private ModelCollection GetCollectionByName(string collectionName)
     {
         if (!_collections.TryGetValue(collectionName, out var collection))
         {
-            collection = new ModelCollection(collectionName);
+            collection = new ModelCollection(collectionName, persistenceEngine);
             _collections[collectionName] = collection;
         }
 

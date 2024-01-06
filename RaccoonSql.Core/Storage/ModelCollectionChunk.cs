@@ -1,54 +1,45 @@
 using System.Collections;
 using System.Diagnostics;
+using System.Text.Json.Serialization;
 
 namespace RaccoonSql.Core.Storage;
 
-internal class ModelCollectionChunk : IEnumerable<IModel>
+public class ModelCollectionChunk
 {
-    private List<IModel> _models = new();
-    private int _count = 0;
+    public List<object> Models { get; set; } = new();
 
-    public ModelCollectionChunk()
-    {
-        //TODO: load from file system
-    }
-
-    public int ModelCount => _models.Count;
+    public int ModelCount => Models.Count;
 
     public void WriteModel(int offset, IModel model)
     {
-        Debug.Assert(offset <= _models.Count, "offset <= _models.Count");
-        if (_models.Count == offset)
+        Debug.Assert(offset <= Models.Count, "offset <= _models.Count");
+        if (Models.Count == offset)
         {
-            _models.Add(model);
-            _count++;
+            Models.Add(model);
         }
         else
         {
-            _models[offset] = model;
+            Models[offset] = model;
         }
     }
 
     public IModel GetModel(int offset)
     {
-        Debug.Assert(offset < _models.Count, "offset < _models.Count");
-        return _models[offset];
+        Debug.Assert(offset < Models.Count, "offset < _models.Count");
+        return (IModel)Models[offset];
     }
 
-    public void DeleteModel(int offset)
+    public Guid? DeleteModel(int offset)
     {       
-        Debug.Assert(offset < _models.Count, "offset < _models.Count");
-        _models[offset] = _models[_count - 1];
-        _count--;
+        Debug.Assert(offset < Models.Count, "offset < _models.Count");
+        Guid? movedModelId = null;
+        if (offset < Models.Count - 1)
+        {
+            Models[offset] = Models[^1];
+            movedModelId = ((IModel)Models[offset]).Id;
+        }
+        Models.RemoveAt(Models.Count - 1);
+        return movedModelId;
     }
 
-    public IEnumerator<IModel> GetEnumerator()
-    {
-        return _models.GetEnumerator();
-    }
-
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return GetEnumerator();
-    }
 }

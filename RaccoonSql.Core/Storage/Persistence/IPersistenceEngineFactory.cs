@@ -1,4 +1,4 @@
-namespace RaccoonSql.Core.Persistance;
+namespace RaccoonSql.Core.Storage.Persistence;
 
 public interface IPersistenceEngineFactory
 {
