@@ -15,6 +15,11 @@ internal class InMemoryPersistenceEngine : IPersistenceEngine
         return new ModelIndex();
     }
 
+    public void AppendIndexChange(string setName, IndexChange indexChange)
+    {
+        // no op
+    }
+
     public ModelCollectionChunk LoadChunk(string setName, int chunkId)
     {
         return new ModelCollectionChunk();

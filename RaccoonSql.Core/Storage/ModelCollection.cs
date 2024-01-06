@@ -49,11 +49,15 @@ internal class ModelCollection
         chunk.WriteModel(chunkInfo.Value.Offset, data);
         _persistenceEngine.WriteChunk(_name, chunkInfo.Value.ChunkId, chunk);
 
-        if (writeNew)
+        if (!writeNew) return;
+        
+        _index.Set(data.Id, chunkInfo.Value);
+        _persistenceEngine.AppendIndexChange(_name, new IndexChange
         {
-            _index.Set(data.Id, chunkInfo.Value);
-            _persistenceEngine.WriteIndex(_name, _index);
-        }
+            Id = data.Id,
+            ChangeType = IndexChangeType.Set,
+            ChunkInfo = chunkInfo.Value,
+        });
     }
 
     private ChunkInfo DetermineChunk(Guid id)
@@ -107,11 +111,25 @@ internal class ModelCollection
     {
         var chunk = _chunks[chunkInfo.ChunkId];
         var model = chunk.GetModel(chunkInfo.Offset);
+        
         _index.Delete(model.Id);
+        _persistenceEngine.AppendIndexChange(_name, new()
+        {
+            Id = model.Id,
+            ChangeType = IndexChangeType.Remove,
+            ChunkInfo = chunkInfo,
+        });
+        
         var movedModelId = chunk.DeleteModel(chunkInfo.Offset);
         if (movedModelId != null)
         {
             _index.Set(movedModelId.Value, chunkInfo);
+            _persistenceEngine.AppendIndexChange(_name, new()
+            {
+                Id = model.Id,
+                ChangeType = IndexChangeType.Set,
+                ChunkInfo = chunkInfo,
+            });
         }
     }
 

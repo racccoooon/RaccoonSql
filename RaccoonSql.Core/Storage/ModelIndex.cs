@@ -1,6 +1,9 @@
+using MemoryPack;
+
 namespace RaccoonSql.Core.Storage;
 
-public class ModelIndex
+[MemoryPackable]
+public partial class ModelIndex
 {
     public Dictionary<Guid, ChunkInfo> Index { get; set; } = new();
     public int ChunkCount { get; set; } = 16;
@@ -20,5 +23,20 @@ public class ModelIndex
     public void Set(Guid modelId, ChunkInfo chunkInfo)
     {
         Index[modelId] = chunkInfo;
+    }
+
+    public void Apply(IndexChange change)
+    {
+        switch (change.ChangeType)
+        {
+            case IndexChangeType.Set:
+                Index[change.Id] = change.ChunkInfo;
+                break;
+            case IndexChangeType.Remove:
+                Index.Remove(change.Id);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
     }
 }
