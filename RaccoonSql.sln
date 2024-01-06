@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RaccoonSql.Core", "RaccoonSql.Core\RaccoonSql.Core.csproj", "{1C5F593E-1D47-4858-9DC9-E866D5F09C32}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RaccoonSql.Demo", "RaccoonSql.Demo\RaccoonSql.Demo.csproj", "{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RaccoonSql.Serialization.MemoryPack", "RaccoonSql.Serialization.MemoryPack\RaccoonSql.Serialization.MemoryPack.csproj", "{075FAC61-9FE2-4A6F-A7EF-E2293B5CDE90}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1C5F593E-1D47-4858-9DC9-E866D5F09C32}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C5F593E-1D47-4858-9DC9-E866D5F09C32}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C5F593E-1D47-4858-9DC9-E866D5F09C32}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C5F593E-1D47-4858-9DC9-E866D5F09C32}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{075FAC61-9FE2-4A6F-A7EF-E2293B5CDE90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{075FAC61-9FE2-4A6F-A7EF-E2293B5CDE90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{075FAC61-9FE2-4A6F-A7EF-E2293B5CDE90}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{075FAC61-9FE2-4A6F-A7EF-E2293B5CDE90}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
