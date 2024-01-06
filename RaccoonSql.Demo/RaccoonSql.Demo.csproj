@@ -9,7 +9,6 @@
 
     <ItemGroup>
       <ProjectReference Include="..\RaccoonSql.Core\RaccoonSql.Core.csproj" />
-      <ProjectReference Include="..\RaccoonSql.Serialization.MemoryPack\RaccoonSql.Serialization.MemoryPack.csproj" />
     </ItemGroup>
 
     <ItemGroup>

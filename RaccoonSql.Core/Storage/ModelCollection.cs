@@ -84,9 +84,9 @@ internal class ModelCollection
         {
             foreach (var model in oldChunk.Models)
             {
-                var chunkInfo = DetermineChunk(((IModel)model).Id);
+                var chunkInfo = DetermineChunk(model.Id);
                 var chunk = _chunks[chunkInfo.ChunkId];
-                chunk.WriteModel(chunkInfo.Offset, (IModel)model);
+                chunk.WriteModel(chunkInfo.Offset, model);
             }
         }
 
@@ -118,6 +118,6 @@ internal class ModelCollection
     public IEnumerable<IStorageInfo> GetStorageInfos()
     {
         return _chunks.SelectMany(x => x.Models)
-            .Select(x => GetStorageInfo(((IModel)x).Id));
+            .Select(x => GetStorageInfo(x.Id));
     }
 }
