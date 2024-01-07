@@ -11,7 +11,6 @@ internal class ModelCollection
     private readonly IPersistenceEngine _persistenceEngine;
     private ModelIndex _index;
     private ModelCollectionChunk[] _chunks;
-    private long _modelCount;
 
     public ModelCollection(string name, IPersistenceEngine persistenceEngine)
     {
@@ -70,7 +69,7 @@ internal class ModelCollection
 
     private void RehashIfNeeded()
     {
-        if (_modelCount * 100 / (_index.ChunkCount * ModelsPerChunk) <= RehashThreshold) return;
+        if (_index.Index.Count * 100 / (_index.ChunkCount * ModelsPerChunk) <= RehashThreshold) return;
         
         var newChunkCount = _index.ChunkCount * 2;
         var newChunks = Enumerable.Range(0, newChunkCount)
@@ -82,7 +81,6 @@ internal class ModelCollection
         _index = new ModelIndex();
         _index.ChunkCount = newChunkCount;
         _chunks = newChunks;
-        _modelCount = 0;
             
         foreach (var oldChunk in oldChunks)
         {
@@ -91,6 +89,7 @@ internal class ModelCollection
                 var chunkInfo = DetermineChunk(model.Id);
                 var chunk = _chunks[chunkInfo.ChunkId];
                 chunk.WriteModel(chunkInfo.Offset, model);
+                _index.Set(model.Id, chunkInfo);
             }
         }
 

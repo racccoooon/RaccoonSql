@@ -1,9 +1,10 @@
+using System.Linq.Expressions;
 using JetBrains.Annotations;
 
 namespace RaccoonSql.Core;
 
 [PublicAPI]
-public interface IModelSet<TData> where TData : IModel
+public interface IModelSet<TData> //: IQueryableModelSet<TData> where TData : IModel
 {
     void Insert(TData data, ConflictBehavior? conflictBehavior = null);
 
@@ -47,5 +48,25 @@ public interface IModelSet<TData> where TData : IModel
         return Task.CompletedTask;
     }
 
-    IEnumerable<TData> Where(Func<TData, bool> predicate);
+    IEnumerable<TData> All();
+}
+
+public interface IQueryableModelSet<TData> where TData : IModel
+{
+    IQueryableModelSet<TData> Filter<TProperty>(
+        Expression<Func<TData, TProperty>> propertyExpression,
+        CompareKind compareKind,
+        TProperty compareValue)
+        where TProperty : IComparable<TProperty>;
+    
+    IReadOnlyList<TData> GetResults();
+}
+
+public enum CompareKind
+{
+    GreaterThan,
+    GreaterOrEqualTo,
+    EqualTo,
+    LessOrEqualTo,
+    LessThan,
 }

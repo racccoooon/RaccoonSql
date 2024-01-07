@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using RaccoonSql.Core.Storage;
 
 namespace RaccoonSql.Core;
@@ -67,11 +68,10 @@ internal class ModelSet<TData>
         _storageEngine.Delete(storageInfo);
     }
 
-    public IEnumerable<TData> Where(Func<TData, bool> predicate)
+    public IEnumerable<TData> All()
     {
         return _storageEngine.QueryStorageInfo(SetName)
             .Select(x => _storageEngine.Read(x))
-            .Cast<TData>()
-            .Where(predicate);
+            .Cast<TData>();
     }
 }
