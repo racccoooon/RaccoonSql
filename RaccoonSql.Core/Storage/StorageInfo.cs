@@ -1,6 +1,6 @@
 namespace RaccoonSql.Core.Storage;
 
-internal class StorageInfo : IStorageInfo
+public readonly struct StorageInfo
 {
     public bool Exists => ChunkInfo is not null;
     public required string CollectionName { get; init; }

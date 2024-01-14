@@ -20,39 +20,36 @@ internal class StorageEngine(
         return collection;
     }
 
-    public IEnumerable<IStorageInfo> QueryStorageInfo(string collectionName, Type type)
+    public IEnumerable<StorageInfo> QueryStorageInfo(string collectionName, Type type)
     {
         var collection = GetCollectionByName(collectionName, type);
         return collection.GetStorageInfos();
     }
 
-    public IStorageInfo GetStorageInfo(string collectionName, Guid id, Type type)
+    public StorageInfo GetStorageInfo(string collectionName, Guid id, Type type)
     {
         var collection = GetCollectionByName(collectionName, type);
         var storageInfo = collection.GetStorageInfo(id);
         return storageInfo;
     }
 
-    public void Write(IStorageInfo storageInfo, IModel model)
+    public void Write(StorageInfo storageInfo, IModel model)
     {
-        if (storageInfo is not StorageInfo info) throw new NotStorageInfoException();
-        var collection = GetCollectionByName(info.CollectionName, typeof(IModel));
-        collection.Write(model, info.ChunkInfo);
+        var collection = GetCollectionByName(storageInfo.CollectionName, typeof(IModel));
+        collection.Write(model, storageInfo.ChunkInfo);
     }
 
-    public IModel Read(IStorageInfo storageInfo)
+    public IModel Read(StorageInfo storageInfo)
     {
-        if (storageInfo is not StorageInfo info) throw new NotStorageInfoException();
-        Debug.Assert(info.ChunkInfo != null, "info.ChunkInfo != null");
-        var collection = GetCollectionByName(info.CollectionName, typeof(IModel));
-        return collection.Read(info.ChunkInfo.Value);
+        Debug.Assert(storageInfo.ChunkInfo != null, "storageInfo.ChunkInfo != null");
+        var collection = GetCollectionByName(storageInfo.CollectionName, typeof(IModel));
+        return collection.Read(storageInfo.ChunkInfo.Value);
     }
 
-    public void Delete(IStorageInfo storageInfo, Type type)
+    public void Delete(StorageInfo storageInfo, Type type)
     {
-        if (storageInfo is not StorageInfo info) throw new NotStorageInfoException();
-        Debug.Assert(info.ChunkInfo != null, "info.ChunkInfo != null");
-        var collection = GetCollectionByName(info.CollectionName, type);
-        collection.Delete(info.ChunkInfo.Value);
+        Debug.Assert(storageInfo.ChunkInfo != null, "storageInfo.ChunkInfo != null");
+        var collection = GetCollectionByName(storageInfo.CollectionName, type);
+        collection.Delete(storageInfo.ChunkInfo.Value);
     }
 }

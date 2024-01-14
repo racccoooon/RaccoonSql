@@ -6,7 +6,7 @@ namespace RaccoonSql.Core.Storage;
 public partial class ModelIndex
 {
     public Dictionary<Guid, ChunkInfo> Index { get; set; } = new();
-    public int ChunkCount { get; set; } = 16;
+    public uint ChunkCount { get; set; } = 16;
 
     public ChunkInfo? GetChunkInfo(Guid id)
     {

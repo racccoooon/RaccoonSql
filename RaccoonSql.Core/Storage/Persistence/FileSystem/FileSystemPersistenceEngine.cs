@@ -1,4 +1,5 @@
 using System.IO.Abstractions;
+using System.Runtime.CompilerServices;
 using MemoryPack;
 using RaccoonSql.Core.Serialization;
 
@@ -10,6 +11,58 @@ public class FileSystemPersistenceEngine(
     ISerializationEngine serializationEngine) : IPersistenceEngine
 {
     private static readonly Dictionary<string, int> FileWrites = new();
+    private readonly Dictionary<string, string> _indexNames = new();
+    private readonly Dictionary<string, string> _indexLogNames = new();
+    private readonly Dictionary<string, string> _chunkNames = new();
+    private readonly Dictionary<string, string> _chunkLogNames = new();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetIndexName(string setName)
+    {
+        return GetName(_indexNames, setName, "index");
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetIndexLogName(string setName)
+    {
+        return GetName(_indexLogNames, setName, "idxlog");
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetChunkName(string setName, uint chunkId)
+    {
+        return GetChunkName(_chunkNames, setName, chunkId, "chunk");
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetChunkLogName(string setName, uint chunkId)
+    {
+        return GetChunkName(_chunkLogNames, setName, chunkId, "chnklog");
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetName(Dictionary<string, string> names, string setName, string ending)
+    {
+        if (!names.TryGetValue(setName, out var result))
+        {
+            result = Path.Join(rootPath, $"{setName}.{ending}");
+            names[setName] = result;
+        }
+
+        return result;
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private string GetChunkName(Dictionary<string, string> names, string setName, uint chunkId, string ending)
+    {
+        if (!names.TryGetValue(setName, out var result))
+        {
+            result = Path.Join(rootPath, $"{setName}.{chunkId}.{ending}");
+            names[setName] = result;
+        }
+
+        return result;
+    }
 
     private static bool ShouldWriteFile(string fileName, bool isIndex)
     {
@@ -64,7 +117,7 @@ public class FileSystemPersistenceEngine(
 
     public ModelIndex LoadIndex(string setName)
     {
-        var path = Path.Join(rootPath, $"{setName}.index");
+        var path = GetIndexName(setName);
 
         ModelIndex index;
         if (fileSystem.File.Exists(path))
@@ -77,7 +130,7 @@ public class FileSystemPersistenceEngine(
             index = new ModelIndex();
         }
 
-        var changeFile = Path.Join(rootPath, $"{setName}.idxlog");
+        var changeFile = GetIndexLogName(setName);
         var changes = LoadIndexChanges(changeFile);
         foreach (var change in changes)
         {
@@ -97,15 +150,15 @@ public class FileSystemPersistenceEngine(
 
     public void FlushIndex(string setName, ModelIndex index)
     {
-        var path = Path.Join(rootPath, $"{setName}.index");
-        var changeFile = Path.Join(rootPath, $"{setName}.idxlog");
+        var path = GetIndexName(setName);
+        var changeFile = GetIndexLogName(setName);
         WriteIndexInternal(path, changeFile, index);
     }
 
     public void WriteIndex(string setName, ModelIndex index, IndexChange change)
     {
-        var path = Path.Join(rootPath, $"{setName}.index");
-        var changeFile = Path.Join(rootPath, $"{setName}.idxlog");
+        var path = GetIndexName(setName);
+        var changeFile = GetIndexLogName(setName);
         if (ShouldWriteFile(path, true))
         {
             WriteIndexInternal(path, changeFile, index);
@@ -122,9 +175,9 @@ public class FileSystemPersistenceEngine(
         fileSystem.File.Delete(changeFile);
     }
 
-    public ModelCollectionChunk LoadChunk(string setName, int chunkId, Type type)
+    public ModelCollectionChunk LoadChunk(string setName, uint chunkId, Type type)
     {
-        var path = Path.Join(rootPath, $"{setName}.{chunkId}.chunk");
+        var path = GetChunkName(setName, chunkId);
 
         ModelCollectionChunk chunk;
         if (fileSystem.File.Exists(path))
@@ -137,7 +190,7 @@ public class FileSystemPersistenceEngine(
             chunk = new ModelCollectionChunk();
         }
 
-        var changeFile = Path.Join(rootPath, $"{setName}.{chunkId}.chnklog");
+        var changeFile = GetChunkLogName(setName, chunkId);
         var changes = LoadChunkChanges(changeFile, type);
         foreach (var change in changes)
         {
@@ -195,10 +248,10 @@ public class FileSystemPersistenceEngine(
         return changes;
     }
 
-    public void WriteChunk(string setName, int chunkId, ModelCollectionChunk chunk, ChunkChange change)
+    public void WriteChunk(string setName, uint chunkId, ModelCollectionChunk chunk, ChunkChange change)
     {
-        var path = Path.Join(rootPath, $"{setName}.{chunkId}.chunk");
-        var changeFile = Path.Join(rootPath, $"{setName}.{chunkId}.chnklog");
+        var path = GetChunkName(setName, chunkId);
+        var changeFile = GetChunkLogName(setName, chunkId);
         if (ShouldWriteFile(path, false))
         {
             WriteChunkInternal(path, changeFile, chunk);
@@ -234,12 +287,4 @@ public class FileSystemPersistenceEngine(
         stream.Write(BitConverter.GetBytes(buffer.Length));
         stream.Write(buffer);
     }
-}
-
-[MemoryPackable]
-public partial struct ChunkChangeModel
-{
-    public required byte[] SerializedModel { get; init; }
-    public required bool Add { get; init; }
-    public required int Offset { get; init; }
 }

@@ -6,9 +6,9 @@ public class ModelCollectionChunk
 {
     public List<IModel> Models { get; set; } = new();
 
-    public int ModelCount => Models.Count;
+    public uint ModelCount => (uint)Models.Count;
 
-    public ChunkChange WriteModel(int offset, IModel model)
+    public ChunkChange WriteModel(uint offset, IModel model)
     {
         Debug.Assert(offset <= Models.Count, "offset <= _models.Count");
         var add = Models.Count == offset; 
@@ -18,7 +18,7 @@ public class ModelCollectionChunk
         }
         else
         {
-            Models[offset] = model;
+            Models[(int)offset] = model;
         }
 
         return new ChunkChange
@@ -29,20 +29,20 @@ public class ModelCollectionChunk
         };
     }
 
-    public IModel GetModel(int offset)
+    public IModel GetModel(uint offset)
     {
         Debug.Assert(offset < Models.Count, "offset < _models.Count");
-        return Models[offset];
+        return Models[(int)offset];
     }
 
-    public Guid? DeleteModel(int offset)
+    public Guid? DeleteModel(uint offset)
     {       
         Debug.Assert(offset < Models.Count, "offset < _models.Count");
         Guid? movedModelId = null;
         if (offset < Models.Count - 1)
         {
-            Models[offset] = Models[^1];
-            movedModelId = Models[offset].Id;
+            Models[(int)offset] = Models[^1];
+            movedModelId = Models[(int)offset].Id;
         }
         Models.RemoveAt(Models.Count - 1);
         return movedModelId;
@@ -56,7 +56,7 @@ public class ModelCollectionChunk
         }
         else
         {
-            Models[change.Offset] = change.Model;
+            Models[(int)change.Offset] = change.Model;
         }
     }
 }

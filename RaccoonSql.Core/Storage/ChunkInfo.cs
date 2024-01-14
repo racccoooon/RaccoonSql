@@ -3,8 +3,8 @@ using MemoryPack;
 namespace RaccoonSql.Core.Storage;
 
 [MemoryPackable]
-public partial struct ChunkInfo
+public readonly partial struct ChunkInfo
 {
-    public required int ChunkId { get; init; }
-    public required int Offset { get; init; }
+    public required uint ChunkId { get; init; }
+    public required uint Offset { get; init; }
 }

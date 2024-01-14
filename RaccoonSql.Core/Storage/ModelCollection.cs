@@ -1,4 +1,5 @@
 using RaccoonSql.Core.Storage.Persistence;
+using RaccoonSql.Core.Utils;
 
 namespace RaccoonSql.Core.Storage;
 
@@ -19,9 +20,11 @@ internal class ModelCollection
 
         _index = _persistenceEngine.LoadIndex(name);
 
-        _chunks = Enumerable.Range(0, _index.ChunkCount)
-            .Select(i => persistenceEngine.LoadChunk(name, i, type))
-            .ToArray();
+        _chunks = new ModelCollectionChunk[_index.ChunkCount];
+        for (uint i = 0; i < _chunks.Length; i++)
+        {
+            _chunks[i] = persistenceEngine.LoadChunk(name, i, type);
+        }
     }
 
     public StorageInfo GetStorageInfo(Guid id)
@@ -61,10 +64,13 @@ internal class ModelCollection
 
     private ChunkInfo DetermineChunk(Guid id)
     {
-        var value = BitConverter.ToUInt32(id.ToByteArray(), 12);
-        var chunkId = value % _index.ChunkCount;
-        var chunk = _chunks[(int)chunkId];
-        return new ChunkInfo { ChunkId = (int)chunkId, Offset = chunk.ModelCount };
+        unsafe
+        {
+            var guidBuffer = new GuidBuffer(id);
+            var chunkId = guidBuffer.Int[3] % _index.ChunkCount;
+            var chunk = _chunks[chunkId];
+            return new ChunkInfo { ChunkId = chunkId, Offset = chunk.ModelCount };
+        }
     }
 
     private void RehashIfNeeded()
@@ -72,9 +78,11 @@ internal class ModelCollection
         if (_index.Index.Count * 100 / (_index.ChunkCount * ModelsPerChunk) <= RehashThreshold) return;
         
         var newChunkCount = _index.ChunkCount * 2;
-        var newChunks = Enumerable.Range(0, newChunkCount)
-            .Select(_ => new ModelCollectionChunk())
-            .ToArray();
+        var newChunks = new ModelCollectionChunk[newChunkCount];
+        for(var i = 0; i < newChunks.Length; i++)
+        {
+            newChunks[i] = new ModelCollectionChunk();
+        }
 
         var oldChunks = _chunks;
             
@@ -130,7 +138,7 @@ internal class ModelCollection
         }
     }
 
-    public IEnumerable<IStorageInfo> GetStorageInfos()
+    public IEnumerable<StorageInfo> GetStorageInfos()
     {
         return _chunks.SelectMany(x => x.Models)
             .Select(x => GetStorageInfo(x.Id));

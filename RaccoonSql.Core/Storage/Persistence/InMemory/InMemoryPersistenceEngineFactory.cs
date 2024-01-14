@@ -20,7 +20,7 @@ internal class InMemoryPersistenceEngine : IPersistenceEngine
         // no op
     }
 
-    public ModelCollectionChunk LoadChunk(string setName, int chunkId, Type type)
+    public ModelCollectionChunk LoadChunk(string setName, uint chunkId, Type type)
     {
         return new ModelCollectionChunk();
     }
@@ -30,7 +30,7 @@ internal class InMemoryPersistenceEngine : IPersistenceEngine
         // no op
     }
 
-    public void WriteChunk(string setName, int chunkId, ModelCollectionChunk chunk, ChunkChange change)
+    public void WriteChunk(string setName, uint chunkId, ModelCollectionChunk chunk, ChunkChange change)
     {
         // no op
     }
