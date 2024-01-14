@@ -4,7 +4,7 @@ namespace RaccoonSql.Core.Serialization.Json;
 
 internal class JsonSerializationEngine : ISerializationEngine
 {
-    public Stream Serialize<TData>(TData data)
+    public Stream Serialize(object data)
     {
         var serializer = new JsonSerializer
         {
@@ -18,13 +18,13 @@ internal class JsonSerializationEngine : ISerializationEngine
         return stream;
     }
 
-    public TData Deserialize<TData>(Stream stream)
+    public object Deserialize(Stream stream, Type type)
     {
         var serializer = new JsonSerializer
         {
             TypeNameHandling = TypeNameHandling.Auto
         };
         var reader = new JsonTextReader(new StreamReader(stream));
-        return serializer.Deserialize<TData>(reader)!;
+        return serializer.Deserialize(reader, type)!;
     }
 }

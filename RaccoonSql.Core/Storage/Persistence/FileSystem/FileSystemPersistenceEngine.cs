@@ -9,11 +9,30 @@ public class FileSystemPersistenceEngine(
     string rootPath,
     ISerializationEngine serializationEngine) : IPersistenceEngine
 {
-    private IEnumerable<IndexChange> LoadChanges(string setName)
+    private static readonly Dictionary<string, int> FileWrites = new();
+
+    private static bool ShouldWriteFile(string fileName, bool isIndex)
     {
-        var path = Path.Join(rootPath, $"{setName}.idxlog");
+        var fileWrites = FileWrites.GetValueOrDefault(fileName, 0);
+
+        fileWrites++;
+
+        var shouldWrite = false;
+        if (fileWrites == (isIndex ? 10_000 : 100))
+        {
+            fileWrites = 0;
+            shouldWrite = true;
+        }
+
+        FileWrites[fileName] = fileWrites;
+
+        return shouldWrite;
+    }
+
+    private IEnumerable<IndexChange> LoadIndexChanges(string path)
+    {
         if (!fileSystem.File.Exists(path)) return Enumerable.Empty<IndexChange>();
-        
+
         var changes = new List<IndexChange>();
 
         using (var stream = fileSystem.File.OpenRead(path))
@@ -32,23 +51,21 @@ public class FileSystemPersistenceEngine(
                         changes.Add(change);
                     }
                 }
-                catch(EndOfStreamException)
+                catch (EndOfStreamException)
                 {
                     break;
                 }
-                
             }
         }
 
         fileSystem.File.Delete(path);
-
         return changes;
     }
 
     public ModelIndex LoadIndex(string setName)
     {
         var path = Path.Join(rootPath, $"{setName}.index");
-        
+
         ModelIndex index;
         if (fileSystem.File.Exists(path))
         {
@@ -60,51 +77,169 @@ public class FileSystemPersistenceEngine(
             index = new ModelIndex();
         }
 
-        var changes = LoadChanges(setName);
+        var changeFile = Path.Join(rootPath, $"{setName}.idxlog");
+        var changes = LoadIndexChanges(changeFile);
         foreach (var change in changes)
         {
             index.Apply(change);
         }
 
-        WriteIndex(setName, index);
+        WriteIndexInternal(path, changeFile, index);
 
         return index;
     }
 
-    public void AppendIndexChange(string setName, IndexChange indexChange)
+    private void AppendIndexChange(string path, IndexChange indexChange)
     {
-        var path = Path.Join(rootPath, $"{setName}.idxlog");
         using var stream = fileSystem.File.Open(path, FileMode.Append);
         stream.Write(MemoryPackSerializer.Serialize(indexChange));
     }
 
-    public void WriteIndex(string setName, ModelIndex index)
+    public void FlushIndex(string setName, ModelIndex index)
     {
         var path = Path.Join(rootPath, $"{setName}.index");
-        fileSystem.File.WriteAllBytes(path, MemoryPackSerializer.Serialize(index));
-
         var changeFile = Path.Join(rootPath, $"{setName}.idxlog");
+        WriteIndexInternal(path, changeFile, index);
+    }
+
+    public void WriteIndex(string setName, ModelIndex index, IndexChange change)
+    {
+        var path = Path.Join(rootPath, $"{setName}.index");
+        var changeFile = Path.Join(rootPath, $"{setName}.idxlog");
+        if (ShouldWriteFile(path, true))
+        {
+            WriteIndexInternal(path, changeFile, index);
+        }
+        else
+        {
+            AppendIndexChange(changeFile, change);
+        }
+    }
+
+    private void WriteIndexInternal(string file, string changeFile, ModelIndex index)
+    {
+        fileSystem.File.WriteAllBytes(file, MemoryPackSerializer.Serialize(index));
         fileSystem.File.Delete(changeFile);
     }
 
-    public ModelCollectionChunk LoadChunk(string setName, int chunkId)
+    public ModelCollectionChunk LoadChunk(string setName, int chunkId, Type type)
     {
         var path = Path.Join(rootPath, $"{setName}.{chunkId}.chunk");
-        try
+
+        ModelCollectionChunk chunk;
+        if (fileSystem.File.Exists(path))
         {
-            using var indexFileStream = fileSystem.File.OpenRead(path);
-            return serializationEngine.Deserialize<ModelCollectionChunk>(indexFileStream);
+            using var chunkFileStream = fileSystem.File.OpenRead(path);
+            chunk = (ModelCollectionChunk) serializationEngine.Deserialize(chunkFileStream, typeof(ModelCollectionChunk));
         }
-        catch (FileNotFoundException)
+        else
         {
-            return new ModelCollectionChunk();
+            chunk = new ModelCollectionChunk();
+        }
+
+        var changeFile = Path.Join(rootPath, $"{setName}.{chunkId}.chnklog");
+        var changes = LoadChunkChanges(changeFile, type);
+        foreach (var change in changes)
+        {
+            chunk.Apply(change);
+        }
+
+        WriteChunkInternal(path, changeFile, chunk);
+
+        return chunk;
+    }
+
+    private IEnumerable<ChunkChange> LoadChunkChanges(string path, Type type)
+    {
+        if (!fileSystem.File.Exists(path)) return Enumerable.Empty<ChunkChange>();
+
+        var changes = new List<ChunkChange>();
+
+        using (var stream = fileSystem.File.OpenRead(path))
+        {
+            var lengthBuffer = BitConverter.GetBytes(0);
+            var buffer = Array.Empty<byte>();
+            while (true)
+            {
+                try
+                {
+                    stream.ReadExactly(lengthBuffer);
+                }
+                catch (EndOfStreamException)
+                {
+                    break;
+                }
+                
+                var changeSize = BitConverter.ToInt32(lengthBuffer);
+
+                if (buffer.Length < changeSize)
+                {
+                    buffer = new byte[changeSize];
+                }
+                
+                stream.ReadExactly(buffer, 0, changeSize);
+                var changeModel = MemoryPackSerializer.Deserialize<ChunkChangeModel>(buffer);
+                using var ms = new MemoryStream(changeModel.SerializedModel);
+                
+                var change = new ChunkChange
+                {
+                    Add = changeModel.Add,
+                    Offset = changeModel.Offset,
+                    Model = (IModel) serializationEngine.Deserialize(ms, type),
+                };
+                changes.Add(change);
+            }
+        }
+        
+        fileSystem.File.Delete(path);
+        return changes;
+    }
+
+    public void WriteChunk(string setName, int chunkId, ModelCollectionChunk chunk, ChunkChange change)
+    {
+        var path = Path.Join(rootPath, $"{setName}.{chunkId}.chunk");
+        var changeFile = Path.Join(rootPath, $"{setName}.{chunkId}.chnklog");
+        if (ShouldWriteFile(path, false))
+        {
+            WriteChunkInternal(path, changeFile, chunk);
+        }
+        else
+        {
+            AppendChunkChange(changeFile, change);
         }
     }
 
-    public void WriteChunk(string setName, int chunkId, ModelCollectionChunk chunk)
+    private void WriteChunkInternal(string path, string changeFile, ModelCollectionChunk chunk)
     {
-        var path = Path.Join(rootPath, $"{setName}.{chunkId}.chunk");
-        using var indexFileStream = fileSystem.File.OpenWrite(path);
-        serializationEngine.Serialize(chunk).CopyTo(indexFileStream);
+        using var chunkFileStream = fileSystem.File.OpenWrite(path);
+        serializationEngine.Serialize(chunk).CopyTo(chunkFileStream);
+        fileSystem.File.Delete(changeFile);
     }
+
+    private void AppendChunkChange(string path, ChunkChange chunkChange)
+    {
+        using var stream = fileSystem.File.Open(path, FileMode.Append);
+        using var serializedModel = serializationEngine.Serialize(chunkChange.Model);
+        using var ms = new MemoryStream();
+        serializedModel.CopyTo(ms);
+
+        var changeModel = new ChunkChangeModel
+        {
+            SerializedModel = ms.ToArray(),
+            Add = chunkChange.Add,
+            Offset = chunkChange.Offset,
+        };
+        
+        var buffer = MemoryPackSerializer.Serialize(changeModel);
+        stream.Write(BitConverter.GetBytes(buffer.Length));
+        stream.Write(buffer);
+    }
+}
+
+[MemoryPackable]
+public partial struct ChunkChangeModel
+{
+    public required byte[] SerializedModel { get; init; }
+    public required bool Add { get; init; }
+    public required int Offset { get; init; }
 }

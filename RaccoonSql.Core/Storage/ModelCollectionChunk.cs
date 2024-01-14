@@ -1,6 +1,4 @@
-using System.Collections;
 using System.Diagnostics;
-using System.Text.Json.Serialization;
 
 namespace RaccoonSql.Core.Storage;
 
@@ -10,10 +8,11 @@ public class ModelCollectionChunk
 
     public int ModelCount => Models.Count;
 
-    public void WriteModel(int offset, IModel model)
+    public ChunkChange WriteModel(int offset, IModel model)
     {
         Debug.Assert(offset <= Models.Count, "offset <= _models.Count");
-        if (Models.Count == offset)
+        var add = Models.Count == offset; 
+        if (add)
         {
             Models.Add(model);
         }
@@ -21,6 +20,13 @@ public class ModelCollectionChunk
         {
             Models[offset] = model;
         }
+
+        return new ChunkChange
+        {
+            Model = model,
+            Add = add,
+            Offset = offset,
+        };
     }
 
     public IModel GetModel(int offset)
@@ -42,4 +48,15 @@ public class ModelCollectionChunk
         return movedModelId;
     }
 
+    public void Apply(ChunkChange change)
+    {
+        if (change.Add)
+        {
+            Models.Add(change.Model);
+        }
+        else
+        {
+            Models[change.Offset] = change.Model;
+        }
+    }
 }

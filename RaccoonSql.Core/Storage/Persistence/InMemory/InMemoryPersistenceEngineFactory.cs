@@ -15,22 +15,22 @@ internal class InMemoryPersistenceEngine : IPersistenceEngine
         return new ModelIndex();
     }
 
-    public void AppendIndexChange(string setName, IndexChange indexChange)
+    public void FlushIndex(string setName, ModelIndex index)
     {
         // no op
     }
 
-    public ModelCollectionChunk LoadChunk(string setName, int chunkId)
+    public ModelCollectionChunk LoadChunk(string setName, int chunkId, Type type)
     {
         return new ModelCollectionChunk();
     }
 
-    public void WriteIndex(string setName, ModelIndex index)
+    public void WriteIndex(string setName, ModelIndex index, IndexChange change)
     {
         // no op
     }
 
-    public void WriteChunk(string setName, int chunkId, ModelCollectionChunk chunk)
+    public void WriteChunk(string setName, int chunkId, ModelCollectionChunk chunk, ChunkChange change)
     {
         // no op
     }

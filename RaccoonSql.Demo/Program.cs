@@ -37,48 +37,16 @@ var personFaker = new Faker<PersonModel>()
     .RuleFor(x => x.Birthday, f => f.Date.PastDateOnly(50))
     .RuleFor(x => x.Height, f => f.Random.Number(110, 220))
     .RuleFor(x => x.Name, f => f.Person.FullName);
-/*
+
+var personModels = personFaker.GenerateForever().Take(100_000).ToList();
+
 var stopwatch = Stopwatch.StartNew();
 
-for (int i = 0; i < 100_000; i++)
+foreach (var t in personModels)
 {
-    persons.Insert(personFaker);
+    persons.Insert(t);
 }
 
 stopwatch.Stop();
 
-Console.WriteLine(TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds).Humanize());*/
-var all = personFaker.GenerateForever().Take(100).ToList();
-var bPlusTree = new BPlusTree<DateOnly, PersonModel>(20);
-foreach (var personModel in all)
-{
-    bPlusTree.Insert(personModel.Birthday, personModel);
-}
-
-var from = all[0].Birthday;
-var to = all[1].Birthday;
-
-if (from > to)
-{
-    (from, to) = (to, from);
-}
-
-Console.WriteLine($"{from}:{to}");
-
-var slowWatch = Stopwatch.StartNew();
-var enumerable = all.Where(x => from <= x.Birthday && to >= x.Birthday).ToList();
-slowWatch.Stop();
-Console.WriteLine(enumerable.Count);
-Console.WriteLine(TimeSpan.FromMilliseconds(slowWatch.ElapsedMilliseconds).Humanize());
-
-var filterWatch = Stopwatch.StartNew();
-
-var result = bPlusTree.Range(from, to, false, false).ToList();
-
-filterWatch.Stop();
-Console.WriteLine(result.Count);
-Console.WriteLine(TimeSpan.FromMilliseconds(filterWatch.ElapsedMilliseconds).Humanize());
-
-var notFound = enumerable.Except(result).First();
-Console.WriteLine(notFound);
-Console.WriteLine(result.Any(x => x.Id == notFound.Id));
+Console.WriteLine(TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds).Humanize());

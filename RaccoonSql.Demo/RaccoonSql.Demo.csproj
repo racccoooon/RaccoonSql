@@ -17,15 +17,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Compile Remove="TestDB\**" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <EmbeddedResource Remove="TestDB\**" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <None Remove="TestDB\**" />
+      <Folder Include="TestDB\" />
     </ItemGroup>
 
 </Project>

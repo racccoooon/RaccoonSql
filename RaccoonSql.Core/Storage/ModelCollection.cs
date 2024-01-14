@@ -12,7 +12,7 @@ internal class ModelCollection
     private ModelIndex _index;
     private ModelCollectionChunk[] _chunks;
 
-    public ModelCollection(string name, IPersistenceEngine persistenceEngine)
+    public ModelCollection(string name, IPersistenceEngine persistenceEngine, Type type)
     {
         _name = name;
         _persistenceEngine = persistenceEngine;
@@ -20,7 +20,7 @@ internal class ModelCollection
         _index = _persistenceEngine.LoadIndex(name);
 
         _chunks = Enumerable.Range(0, _index.ChunkCount)
-            .Select(i => persistenceEngine.LoadChunk(name, i))
+            .Select(i => persistenceEngine.LoadChunk(name, i, type))
             .ToArray();
     }
 
@@ -45,13 +45,13 @@ internal class ModelCollection
         
         var chunk = _chunks[chunkInfo.Value.ChunkId];
         
-        chunk.WriteModel(chunkInfo.Value.Offset, data);
-        _persistenceEngine.WriteChunk(_name, chunkInfo.Value.ChunkId, chunk);
+        var change = chunk.WriteModel(chunkInfo.Value.Offset, data);
+        _persistenceEngine.WriteChunk(_name, chunkInfo.Value.ChunkId, chunk, change);
 
         if (!writeNew) return;
         
         _index.Set(data.Id, chunkInfo.Value);
-        _persistenceEngine.AppendIndexChange(_name, new IndexChange
+        _persistenceEngine.WriteIndex(_name, _index, new IndexChange
         {
             Id = data.Id,
             ChangeType = IndexChangeType.Set,
@@ -78,8 +78,10 @@ internal class ModelCollection
 
         var oldChunks = _chunks;
             
-        _index = new ModelIndex();
-        _index.ChunkCount = newChunkCount;
+        _index = new ModelIndex
+        {
+            ChunkCount = newChunkCount
+        };
         _chunks = newChunks;
             
         foreach (var oldChunk in oldChunks)
@@ -93,11 +95,7 @@ internal class ModelCollection
             }
         }
 
-        _persistenceEngine.WriteIndex(_name, _index);
-        for (var i = 0; i < _index.ChunkCount; i++)
-        {
-            _persistenceEngine.WriteChunk(_name, i, _chunks[i]);
-        }
+        _persistenceEngine.FlushIndex(_name, _index);
     }
 
     public IModel Read(ChunkInfo chunkInfo)
@@ -112,7 +110,7 @@ internal class ModelCollection
         var model = chunk.GetModel(chunkInfo.Offset);
         
         _index.Delete(model.Id);
-        _persistenceEngine.AppendIndexChange(_name, new()
+        _persistenceEngine.WriteIndex(_name, _index, new IndexChange
         {
             Id = model.Id,
             ChangeType = IndexChangeType.Remove,
@@ -123,7 +121,7 @@ internal class ModelCollection
         if (movedModelId != null)
         {
             _index.Set(movedModelId.Value, chunkInfo);
-            _persistenceEngine.AppendIndexChange(_name, new()
+            _persistenceEngine.WriteIndex(_name, _index, new IndexChange
             {
                 Id = model.Id,
                 ChangeType = IndexChangeType.Set,

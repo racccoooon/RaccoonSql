@@ -24,7 +24,7 @@ internal class ModelSet<TData>
     
     public void Insert(TData data, ConflictBehavior? conflictBehavior)
     {
-        var storageInfo = _storageEngine.GetStorageInfo(SetName, data.Id);
+        var storageInfo = _storageEngine.GetStorageInfo(SetName, data.Id, typeof(TData));
         if ((conflictBehavior ?? _modelStoreOptions.DefaultInsertConflictBehavior).ShouldThrow(storageInfo.Exists))
             throw new DuplicateIdException(typeof(TData), data.Id);
         _storageEngine.Write(storageInfo, data);
@@ -32,13 +32,13 @@ internal class ModelSet<TData>
 
     public bool Exists(Guid id)
     {
-        var storageInfo = _storageEngine.GetStorageInfo(SetName, id);
+        var storageInfo = _storageEngine.GetStorageInfo(SetName, id, typeof(TData));
         return storageInfo.Exists;
     }
 
     public TData? Find(Guid id, ConflictBehavior? conflictBehavior)
     {
-        var storageInfo = _storageEngine.GetStorageInfo(SetName, id);
+        var storageInfo = _storageEngine.GetStorageInfo(SetName, id, typeof(TData));
         if ((conflictBehavior ?? _modelStoreOptions.FindDefaultConflictBehavior).ShouldThrow(!storageInfo.Exists))
             throw new IdNotFoundException(typeof(TData), id);
         if (!storageInfo.Exists)
@@ -48,7 +48,7 @@ internal class ModelSet<TData>
 
     public void Update(TData data, ConflictBehavior? conflictBehavior)
     {
-        var storageInfo = _storageEngine.GetStorageInfo(SetName, data.Id);
+        var storageInfo = _storageEngine.GetStorageInfo(SetName, data.Id, typeof(TData));
         if ((conflictBehavior ?? _modelStoreOptions.DefaultUpdateConflictBehavior).ShouldThrow(!storageInfo.Exists))
             throw new IdNotFoundException(typeof(TData), data.Id);
         _storageEngine.Write(storageInfo, data);
@@ -56,21 +56,21 @@ internal class ModelSet<TData>
 
     public void Upsert(TData data)
     {
-        var storageInfo = _storageEngine.GetStorageInfo(SetName, data.Id);
+        var storageInfo = _storageEngine.GetStorageInfo(SetName, data.Id, typeof(TData));
         _storageEngine.Write(storageInfo, data);
     }
 
     public void Remove(Guid id, ConflictBehavior? conflictBehavior)
     {
-        var storageInfo = _storageEngine.GetStorageInfo(SetName, id);
+        var storageInfo = _storageEngine.GetStorageInfo(SetName, id, typeof(TData));
         if ((conflictBehavior ?? _modelStoreOptions.DefaultRemoveConflictBehavior).ShouldThrow(!storageInfo.Exists)) 
             throw new IdNotFoundException(typeof(TData), id);
-        _storageEngine.Delete(storageInfo);
+        _storageEngine.Delete(storageInfo, typeof(TData));
     }
 
     public IEnumerable<TData> All()
     {
-        return _storageEngine.QueryStorageInfo(SetName)
+        return _storageEngine.QueryStorageInfo(SetName, typeof(TData))
             .Select(x => _storageEngine.Read(x))
             .Cast<TData>();
     }
