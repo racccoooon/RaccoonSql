@@ -268,16 +268,16 @@ public class FileSystemPersistenceEngine(
         where TModel : IModel
     {
         using var chunkFileStream = fileSystem.File.OpenWrite(path);
-        serializationEngine.Serialize(chunk, chunk.GetType()).CopyTo(chunkFileStream);
+        serializationEngine.Serialize(chunkFileStream, chunk, chunk.GetType());
         fileSystem.File.Delete(changeFile);
     }
 
     private void AppendChunkChange(string path, ChunkChange chunkChange)
     {
         using var stream = fileSystem.File.Open(path, FileMode.Append);
-        using var serializedModel = serializationEngine.Serialize(chunkChange.Model, chunkChange.Model.GetType());
+        
         using var ms = new MemoryStream();
-        serializedModel.CopyTo(ms);
+        serializationEngine.Serialize(ms, chunkChange.Model, chunkChange.Model.GetType());
 
         var changeModel = new ChunkChangeModel
         {
