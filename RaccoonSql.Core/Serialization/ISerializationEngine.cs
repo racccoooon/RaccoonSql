@@ -5,11 +5,10 @@ namespace RaccoonSql.Core.Serialization;
 [PublicAPI]
 public interface ISerializationEngine
 {
-    //TODO: change non async mehtod to use IReadonlySpan<byte>
-    Stream Serialize(object data);
+    Stream Serialize(object data, Type type);
     
-    Task<Stream> SerializeAsync(object data, CancellationToken cancellationToken = default)
-        => Task.FromResult(Serialize(data));
+    Task<Stream> SerializeAsync(object data, Type type, CancellationToken cancellationToken = default)
+        => Task.FromResult(Serialize(data, type));
     
     object Deserialize(Stream stream, Type type);
 

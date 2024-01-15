@@ -2,13 +2,14 @@ using System.Diagnostics;
 
 namespace RaccoonSql.Core.Storage;
 
-public class ModelCollectionChunk
+public class ModelCollectionChunk<TModel>
+    where TModel : IModel
 {
-    public List<IModel> Models { get; set; } = new();
+    public List<TModel> Models { get; set; } = new();
 
     public uint ModelCount => (uint)Models.Count;
 
-    public ChunkChange WriteModel(uint offset, IModel model)
+    public ChunkChange WriteModel(uint offset, TModel model)
     {
         Debug.Assert(offset <= Models.Count, "offset <= _models.Count");
         var add = Models.Count == offset; 
@@ -29,7 +30,7 @@ public class ModelCollectionChunk
         };
     }
 
-    public IModel GetModel(uint offset)
+    public TModel GetModel(uint offset)
     {
         Debug.Assert(offset < Models.Count, "offset < _models.Count");
         return Models[(int)offset];
@@ -52,11 +53,11 @@ public class ModelCollectionChunk
     {
         if (change.Add)
         {
-            Models.Add(change.Model);
+            Models.Add((TModel)change.Model);
         }
         else
         {
-            Models[(int)change.Offset] = change.Model;
+            Models[(int)change.Offset] = (TModel)change.Model;
         }
     }
 }

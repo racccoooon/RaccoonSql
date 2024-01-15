@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using RaccoonSql.Core;
 
 namespace RaccoonSql.Demo.Models;

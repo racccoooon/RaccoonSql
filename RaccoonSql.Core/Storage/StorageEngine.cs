@@ -5,51 +5,56 @@ namespace RaccoonSql.Core.Storage;
 
 internal class StorageEngine(
     IPersistenceEngine persistenceEngine) 
-    : IStorageEngine
 {
-    private readonly Dictionary<string, ModelCollection> _collections = new();
+    private readonly Dictionary<string, object> _collections = new();
 
-    private ModelCollection GetCollectionByName(string collectionName, Type type)
+    private ModelCollection<TModel> GetCollectionByName<TModel>(string collectionName)
+        where TModel : IModel
     {
         if (!_collections.TryGetValue(collectionName, out var collection))
         {
-            collection = new ModelCollection(collectionName, persistenceEngine, type);
+            collection = new ModelCollection<TModel>(collectionName, persistenceEngine);
             _collections[collectionName] = collection;
         }
 
-        return collection;
+        return (ModelCollection<TModel>)collection;
     }
 
-    public IEnumerable<StorageInfo> QueryStorageInfo(string collectionName, Type type)
+    public IEnumerable<StorageInfo> QueryStorageInfo<TModel>(string collectionName)
+        where TModel : IModel
     {
-        var collection = GetCollectionByName(collectionName, type);
+        var collection = GetCollectionByName<TModel>(collectionName);
         return collection.GetStorageInfos();
     }
 
-    public StorageInfo GetStorageInfo(string collectionName, Guid id, Type type)
+    public StorageInfo GetStorageInfo<TModel>(string collectionName, Guid id)
+        where TModel : IModel
     {
-        var collection = GetCollectionByName(collectionName, type);
+        var collection = GetCollectionByName<TModel>(collectionName);
         var storageInfo = collection.GetStorageInfo(id);
         return storageInfo;
     }
 
-    public void Write(StorageInfo storageInfo, IModel model)
+    public void Write<TModel>(StorageInfo storageInfo, TModel model)
+        where TModel : IModel
     {
-        var collection = GetCollectionByName(storageInfo.CollectionName, typeof(IModel));
+        var collection = GetCollectionByName<TModel>(storageInfo.CollectionName);
         collection.Write(model, storageInfo.ChunkInfo);
     }
 
-    public IModel Read(StorageInfo storageInfo)
+    public TModel Read<TModel>(StorageInfo storageInfo)
+        where TModel : IModel
     {
         Debug.Assert(storageInfo.ChunkInfo != null, "storageInfo.ChunkInfo != null");
-        var collection = GetCollectionByName(storageInfo.CollectionName, typeof(IModel));
+        var collection = GetCollectionByName<TModel>(storageInfo.CollectionName);
         return collection.Read(storageInfo.ChunkInfo.Value);
     }
 
-    public void Delete(StorageInfo storageInfo, Type type)
+    public void Delete<TModel>(StorageInfo storageInfo)
+        where TModel : IModel
     {
         Debug.Assert(storageInfo.ChunkInfo != null, "storageInfo.ChunkInfo != null");
-        var collection = GetCollectionByName(storageInfo.CollectionName, type);
+        var collection = GetCollectionByName<TModel>(storageInfo.CollectionName);
         collection.Delete(storageInfo.ChunkInfo.Value);
     }
 }

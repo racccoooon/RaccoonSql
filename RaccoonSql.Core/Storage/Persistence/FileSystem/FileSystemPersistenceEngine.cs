@@ -175,19 +175,20 @@ public class FileSystemPersistenceEngine(
         fileSystem.File.Delete(changeFile);
     }
 
-    public ModelCollectionChunk LoadChunk(string setName, uint chunkId, Type type)
+    public ModelCollectionChunk<TModel> LoadChunk<TModel>(string setName, uint chunkId, Type type)
+        where TModel : IModel
     {
         var path = GetChunkName(setName, chunkId);
 
-        ModelCollectionChunk chunk;
+        ModelCollectionChunk<TModel> chunk;
         if (fileSystem.File.Exists(path))
         {
             using var chunkFileStream = fileSystem.File.OpenRead(path);
-            chunk = (ModelCollectionChunk) serializationEngine.Deserialize(chunkFileStream, typeof(ModelCollectionChunk));
+            chunk = (ModelCollectionChunk<TModel>) serializationEngine.Deserialize(chunkFileStream, typeof(ModelCollectionChunk<TModel>));
         }
         else
         {
-            chunk = new ModelCollectionChunk();
+            chunk = new ModelCollectionChunk<TModel>();
         }
 
         var changeFile = GetChunkLogName(setName, chunkId);
@@ -248,7 +249,8 @@ public class FileSystemPersistenceEngine(
         return changes;
     }
 
-    public void WriteChunk(string setName, uint chunkId, ModelCollectionChunk chunk, ChunkChange change)
+    public void WriteChunk<TModel>(string setName, uint chunkId, ModelCollectionChunk<TModel> chunk, ChunkChange change)
+        where TModel : IModel
     {
         var path = GetChunkName(setName, chunkId);
         var changeFile = GetChunkLogName(setName, chunkId);
@@ -262,17 +264,18 @@ public class FileSystemPersistenceEngine(
         }
     }
 
-    private void WriteChunkInternal(string path, string changeFile, ModelCollectionChunk chunk)
+    private void WriteChunkInternal<TModel>(string path, string changeFile, ModelCollectionChunk<TModel> chunk)
+        where TModel : IModel
     {
         using var chunkFileStream = fileSystem.File.OpenWrite(path);
-        serializationEngine.Serialize(chunk).CopyTo(chunkFileStream);
+        serializationEngine.Serialize(chunk, chunk.GetType()).CopyTo(chunkFileStream);
         fileSystem.File.Delete(changeFile);
     }
 
     private void AppendChunkChange(string path, ChunkChange chunkChange)
     {
         using var stream = fileSystem.File.Open(path, FileMode.Append);
-        using var serializedModel = serializationEngine.Serialize(chunkChange.Model);
+        using var serializedModel = serializationEngine.Serialize(chunkChange.Model, chunkChange.Model.GetType());
         using var ms = new MemoryStream();
         serializedModel.CopyTo(ms);
 

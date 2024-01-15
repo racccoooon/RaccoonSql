@@ -3,7 +3,8 @@ using RaccoonSql.Core.Utils;
 
 namespace RaccoonSql.Core.Storage;
 
-internal class ModelCollection
+internal class ModelCollection<TModel>
+    where TModel : IModel
 {
     private const int ModelsPerChunk = 64;
     private const int RehashThreshold = 66;
@@ -11,19 +12,19 @@ internal class ModelCollection
     private readonly string _name;
     private readonly IPersistenceEngine _persistenceEngine;
     private ModelIndex _index;
-    private ModelCollectionChunk[] _chunks;
+    private ModelCollectionChunk<TModel>[] _chunks;
 
-    public ModelCollection(string name, IPersistenceEngine persistenceEngine, Type type)
+    public ModelCollection(string name, IPersistenceEngine persistenceEngine)
     {
         _name = name;
         _persistenceEngine = persistenceEngine;
 
         _index = _persistenceEngine.LoadIndex(name);
 
-        _chunks = new ModelCollectionChunk[_index.ChunkCount];
+        _chunks = new ModelCollectionChunk<TModel>[_index.ChunkCount];
         for (uint i = 0; i < _chunks.Length; i++)
         {
-            _chunks[i] = persistenceEngine.LoadChunk(name, i, type);
+            _chunks[i] = persistenceEngine.LoadChunk<TModel>(name, i, typeof(TModel));
         }
     }
 
@@ -37,7 +38,7 @@ internal class ModelCollection
         };
     }
 
-    public void Write(IModel data, ChunkInfo? chunkInfo)
+    public void Write(TModel data, ChunkInfo? chunkInfo)
     {
         var writeNew = chunkInfo is null;
         if (chunkInfo is null)
@@ -78,10 +79,10 @@ internal class ModelCollection
         if (_index.Index.Count * 100 / (_index.ChunkCount * ModelsPerChunk) <= RehashThreshold) return;
         
         var newChunkCount = _index.ChunkCount * 2;
-        var newChunks = new ModelCollectionChunk[newChunkCount];
+        var newChunks = new ModelCollectionChunk<TModel>[newChunkCount];
         for(var i = 0; i < newChunks.Length; i++)
         {
-            newChunks[i] = new ModelCollectionChunk();
+            newChunks[i] = new ModelCollectionChunk<TModel>();
         }
 
         var oldChunks = _chunks;
@@ -106,7 +107,7 @@ internal class ModelCollection
         _persistenceEngine.FlushIndex(_name, _index);
     }
 
-    public IModel Read(ChunkInfo chunkInfo)
+    public TModel Read(ChunkInfo chunkInfo)
     {
         var chunk = _chunks[chunkInfo.ChunkId];
         return chunk.GetModel(chunkInfo.Offset);

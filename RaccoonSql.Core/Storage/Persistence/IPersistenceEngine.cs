@@ -6,6 +6,8 @@ public interface IPersistenceEngine
     void WriteIndex(string setName, ModelIndex index, IndexChange change);
     void FlushIndex(string setName, ModelIndex index);
     
-    ModelCollectionChunk LoadChunk(string setName, uint chunkId, Type type);
-    void WriteChunk(string setName, uint chunkId, ModelCollectionChunk chunk, ChunkChange change);
+    ModelCollectionChunk<TModel> LoadChunk<TModel>(string setName, uint chunkId, Type type)
+        where TModel : IModel;
+    void WriteChunk<TModel>(string setName, uint chunkId, ModelCollectionChunk<TModel> chunk, ChunkChange change)
+        where TModel : IModel;
 }

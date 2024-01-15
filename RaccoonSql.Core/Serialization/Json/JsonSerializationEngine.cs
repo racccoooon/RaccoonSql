@@ -4,7 +4,7 @@ namespace RaccoonSql.Core.Serialization.Json;
 
 internal class JsonSerializationEngine : ISerializationEngine
 {
-    public Stream Serialize(object data)
+    public Stream Serialize(object data, Type type)
     {
         var serializer = new JsonSerializer
         {

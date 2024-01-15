@@ -1,31 +1,18 @@
 ﻿using System.Diagnostics;
-using System.IO.Abstractions;
 using Bogus;
 using Humanizer;
 using RaccoonSql.Core;
-using RaccoonSql.Core.Serialization.Json;
-using RaccoonSql.Core.Storage;
-using RaccoonSql.Core.Storage.Persistence.FileSystem;
 using RaccoonSql.Demo.Models;
 
-var persistenceOptions = new FileSystemPersistenceOptions
-{
-    FileSystem = new FileSystem(),
-    SerializationEngineFactory = new JsonSerializationEngineFactory(),
-    Path = "TestDB",
-};
-var fileSystemStorageEngineOptions = new StorageEngineOptions
-{
-    PersistenceProviderFactory = new FileSystemPersistenceEngineFactory(persistenceOptions),
-};
 var modelStoreOptions = new ModelStoreOptions
 {
     DefaultInsertConflictBehavior = ConflictBehavior.Ignore,
     DefaultRemoveConflictBehavior = ConflictBehavior.Ignore,
     DefaultUpdateConflictBehavior = ConflictBehavior.Ignore,
     FindDefaultConflictBehavior = ConflictBehavior.Ignore,
+    Root = "TestDB",
 };
-var modelStore = new ModelStore(modelStoreOptions, new StorageEngineFactory(fileSystemStorageEngineOptions));
+var modelStore = new ModelStore(modelStoreOptions);
 
 var persons = modelStore.Set<PersonModel>();
 var addressFaker = new Faker<Address>()
