@@ -14,8 +14,8 @@ public class FileSystemPersistenceEngine(
     private static readonly Dictionary<string, int> FileWrites = new();
     private readonly Dictionary<string, string> _indexNames = new();
     private readonly Dictionary<string, string> _indexLogNames = new();
-    private readonly Dictionary<string, string> _chunkNames = new();
-    private readonly Dictionary<string, string> _chunkLogNames = new();
+    private readonly Dictionary<(uint, string), string> _chunkNames = new();
+    private readonly Dictionary<(uint, string), string> _chunkLogNames = new();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private string GetIndexName(string setName)
@@ -54,13 +54,12 @@ public class FileSystemPersistenceEngine(
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private string GetChunkName(Dictionary<string, string> names, string setName, uint chunkId, string ending)
+    private string GetChunkName(Dictionary<(uint, string), string> names, string setName, uint chunkId, string ending)
     {
-        var chunkName = $"{setName}.{chunkId}.{ending}";
-        if (!names.TryGetValue(chunkName, out var result))
+        if (!names.TryGetValue((chunkId, setName), out var result))
         {
-            result = Path.Join(rootPath, chunkName);
-            names[chunkName] = result;
+            result = Path.Join(rootPath, $"{setName}.{chunkId}.{ending}");
+            names[(chunkId, setName)] = result;
         }
 
         return result;
