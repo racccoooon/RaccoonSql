@@ -10,6 +10,7 @@ public class FileSystemPersistenceEngine(
     string rootPath,
     ISerializationEngine serializationEngine) : IPersistenceEngine
 {
+    private readonly FileManager _fileManager = new(fileSystem);
     private static readonly Dictionary<string, int> FileWrites = new();
     private readonly Dictionary<string, string> _indexNames = new();
     private readonly Dictionary<string, string> _indexLogNames = new();
@@ -55,10 +56,11 @@ public class FileSystemPersistenceEngine(
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private string GetChunkName(Dictionary<string, string> names, string setName, uint chunkId, string ending)
     {
-        if (!names.TryGetValue(setName, out var result))
+        var chunkName = $"{setName}.{chunkId}.{ending}";
+        if (!names.TryGetValue(chunkName, out var result))
         {
-            result = Path.Join(rootPath, $"{setName}.{chunkId}.{ending}");
-            names[setName] = result;
+            result = Path.Join(rootPath, chunkName);
+            names[chunkName] = result;
         }
 
         return result;
@@ -111,7 +113,7 @@ public class FileSystemPersistenceEngine(
             }
         }
 
-        fileSystem.File.Delete(path);
+        _fileManager.Delete(path);
         return changes;
     }
 
@@ -144,8 +146,9 @@ public class FileSystemPersistenceEngine(
 
     private void AppendIndexChange(string path, IndexChange indexChange)
     {
-        using var stream = fileSystem.File.Open(path, FileMode.Append);
+        var stream = _fileManager.GetAppend(path);
         stream.Write(MemoryPackSerializer.Serialize(indexChange));
+        stream.Flush();
     }
 
     public void FlushIndex(string setName, ModelIndex index)
@@ -172,7 +175,7 @@ public class FileSystemPersistenceEngine(
     private void WriteIndexInternal(string file, string changeFile, ModelIndex index)
     {
         fileSystem.File.WriteAllBytes(file, MemoryPackSerializer.Serialize(index));
-        fileSystem.File.Delete(changeFile);
+        _fileManager.Delete(changeFile);
     }
 
     public ModelCollectionChunk<TModel> LoadChunk<TModel>(string setName, uint chunkId, Type type)
@@ -245,7 +248,7 @@ public class FileSystemPersistenceEngine(
             }
         }
         
-        fileSystem.File.Delete(path);
+        _fileManager.Delete(path);
         return changes;
     }
 
@@ -267,14 +270,14 @@ public class FileSystemPersistenceEngine(
     private void WriteChunkInternal<TModel>(string path, string changeFile, ModelCollectionChunk<TModel> chunk)
         where TModel : IModel
     {
-        using var chunkFileStream = fileSystem.File.OpenWrite(path);
+        using var chunkFileStream = fileSystem.File.Open(path, FileMode.Create);
         serializationEngine.Serialize(chunkFileStream, chunk, chunk.GetType());
-        fileSystem.File.Delete(changeFile);
+        _fileManager.Delete(changeFile);
     }
 
     private void AppendChunkChange(string path, ChunkChange chunkChange)
-    {
-        using var stream = fileSystem.File.Open(path, FileMode.Append);
+    { 
+        var stream = _fileManager.GetAppend(path);
         
         using var ms = new MemoryStream();
         serializationEngine.Serialize(ms, chunkChange.Model, chunkChange.Model.GetType());
@@ -289,5 +292,32 @@ public class FileSystemPersistenceEngine(
         var buffer = MemoryPackSerializer.Serialize(changeModel);
         stream.Write(BitConverter.GetBytes(buffer.Length));
         stream.Write(buffer);
+        
+        stream.Flush();
+    }
+}
+
+public class FileManager(IFileSystem fileSystem)
+{
+    private Dictionary<string, Stream> _streams = new();
+    
+    public Stream GetAppend(string path)
+    {
+        if (!_streams.TryGetValue(path, out var stream))
+        {
+            stream = fileSystem.File.Open(path, FileMode.Append);
+            _streams[path] = stream;
+        }
+
+        return stream;
+    }
+
+    public void Delete(string path)
+    {
+        if (_streams.Remove(path, out var stream))
+        {
+            stream.Dispose();
+            fileSystem.File.Delete(path);
+        }
     }
 }
