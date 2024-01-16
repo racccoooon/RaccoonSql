@@ -3,6 +3,8 @@
   <component name="UserContentModel">
     <attachedFolders />
     <explicitIncludes />
-    <explicitExcludes />
+    <explicitExcludes>
+      <Path>RaccoonSql.Demo/TestDB</Path>
+    </explicitExcludes>
   </component>
 </project>

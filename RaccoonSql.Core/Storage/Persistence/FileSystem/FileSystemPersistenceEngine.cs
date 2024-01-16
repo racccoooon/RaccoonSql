@@ -12,23 +12,9 @@ public class FileSystemPersistenceEngine(
 {
     private readonly FileManager _fileManager = new(fileSystem);
     private static readonly Dictionary<string, int> FileWrites = new();
-    private readonly Dictionary<string, string> _indexNames = new();
-    private readonly Dictionary<string, string> _indexLogNames = new();
     private readonly Dictionary<(uint, string), string> _chunkNames = new();
     private readonly Dictionary<(uint, string), string> _chunkLogNames = new();
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private string GetIndexName(string setName)
-    {
-        return GetName(_indexNames, setName, "index");
-    }
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private string GetIndexLogName(string setName)
-    {
-        return GetName(_indexLogNames, setName, "idxlog");
-    }
-    
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private string GetChunkName(string setName, uint chunkId)
     {
@@ -39,18 +25,6 @@ public class FileSystemPersistenceEngine(
     private string GetChunkLogName(string setName, uint chunkId)
     {
         return GetChunkName(_chunkLogNames, setName, chunkId, "chnklog");
-    }
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private string GetName(Dictionary<string, string> names, string setName, string ending)
-    {
-        if (!names.TryGetValue(setName, out var result))
-        {
-            result = Path.Join(rootPath, $"{setName}.{ending}");
-            names[setName] = result;
-        }
-
-        return result;
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -65,14 +39,14 @@ public class FileSystemPersistenceEngine(
         return result;
     }
 
-    private static bool ShouldWriteFile(string fileName, bool isIndex)
+    private static bool ShouldWriteFile(string fileName)
     {
         var fileWrites = FileWrites.GetValueOrDefault(fileName, 0);
 
         fileWrites++;
 
         var shouldWrite = false;
-        if (fileWrites == (isIndex ? 10_000 : 100))
+        if (fileWrites == 100)
         {
             fileWrites = 0;
             shouldWrite = true;
@@ -116,65 +90,10 @@ public class FileSystemPersistenceEngine(
         return changes;
     }
 
-    public ModelIndex LoadIndex(string setName)
+    public uint GetChunkCount(string setName)
     {
-        var path = GetIndexName(setName);
-
-        ModelIndex index;
-        if (fileSystem.File.Exists(path))
-        {
-            var indexBytes = fileSystem.File.ReadAllBytes(path);
-            index = MemoryPackSerializer.Deserialize<ModelIndex>(indexBytes)!;
-        }
-        else
-        {
-            index = new ModelIndex();
-        }
-
-        var changeFile = GetIndexLogName(setName);
-        var changes = LoadIndexChanges(changeFile);
-        foreach (var change in changes)
-        {
-            index.Apply(change);
-        }
-
-        WriteIndexInternal(path, changeFile, index);
-
-        return index;
-    }
-
-    private void AppendIndexChange(string path, IndexChange indexChange)
-    {
-        var stream = _fileManager.GetAppend(path);
-        stream.Write(MemoryPackSerializer.Serialize(indexChange));
-        stream.Flush();
-    }
-
-    public void FlushIndex(string setName, ModelIndex index)
-    {
-        var path = GetIndexName(setName);
-        var changeFile = GetIndexLogName(setName);
-        WriteIndexInternal(path, changeFile, index);
-    }
-
-    public void WriteIndex(string setName, ModelIndex index, IndexChange change)
-    {
-        var path = GetIndexName(setName);
-        var changeFile = GetIndexLogName(setName);
-        if (ShouldWriteFile(path, true))
-        {
-            WriteIndexInternal(path, changeFile, index);
-        }
-        else
-        {
-            AppendIndexChange(changeFile, change);
-        }
-    }
-
-    private void WriteIndexInternal(string file, string changeFile, ModelIndex index)
-    {
-        fileSystem.File.WriteAllBytes(file, MemoryPackSerializer.Serialize(index));
-        _fileManager.Delete(changeFile);
+        var length = (uint)fileSystem.Directory.GetFiles(rootPath, $"{setName}.*.chunk").Length;
+        return length == 0 ? 16 : length;
     }
 
     public ModelCollectionChunk<TModel> LoadChunk<TModel>(string setName, uint chunkId, Type type)
@@ -256,7 +175,7 @@ public class FileSystemPersistenceEngine(
     {
         var path = GetChunkName(setName, chunkId);
         var changeFile = GetChunkLogName(setName, chunkId);
-        if (ShouldWriteFile(path, false))
+        if (ShouldWriteFile(path))
         {
             WriteChunkInternal(path, changeFile, chunk);
         }
