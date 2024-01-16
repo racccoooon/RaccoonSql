@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using RaccoonSql.Core.Storage.Persistence;
 
 namespace RaccoonSql.Core.Storage;
@@ -8,6 +9,7 @@ internal class StorageEngine(
 {
     private readonly Dictionary<string, object> _collections = new();
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private ModelCollection<TModel> GetCollectionByName<TModel>(string collectionName)
         where TModel : IModel
     {
@@ -18,13 +20,6 @@ internal class StorageEngine(
         }
 
         return (ModelCollection<TModel>)collection;
-    }
-
-    public IEnumerable<StorageInfo> QueryStorageInfo<TModel>(string collectionName)
-        where TModel : IModel
-    {
-        var collection = GetCollectionByName<TModel>(collectionName);
-        return collection.GetStorageInfos();
     }
 
     public StorageInfo GetStorageInfo<TModel>(string collectionName, Guid id)

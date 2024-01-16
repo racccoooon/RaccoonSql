@@ -299,7 +299,16 @@ public class FileSystemPersistenceEngine(
 
 public class FileManager(IFileSystem fileSystem)
 {
-    private Dictionary<string, Stream> _streams = new();
+    private readonly Dictionary<string, Stream> _streams = new();
+
+    ~FileManager()
+    {
+        foreach (var stream in _streams.Values)
+        {
+            stream.Flush();
+            stream.Close();
+        }
+    }
     
     public Stream GetAppend(string path)
     {

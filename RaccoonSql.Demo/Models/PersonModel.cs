@@ -1,8 +1,10 @@
+using MemoryPack;
 using RaccoonSql.Core;
 
 namespace RaccoonSql.Demo.Models;
 
-public record PersonModel : IModel
+[MemoryPackable]
+public partial record PersonModel : IModel
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -15,7 +17,8 @@ public record PersonModel : IModel
     public Address Address { get; set; }
 }
 
-public record Address
+[MemoryPackable]
+public partial record Address
 {
     public required string Street { get; init; }
     public required string City { get; init; }

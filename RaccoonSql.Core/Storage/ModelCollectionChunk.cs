@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using MemoryPack;
 
 namespace RaccoonSql.Core.Storage;
 
-public class ModelCollectionChunk<TModel>
+[MemoryPackable]
+public partial class ModelCollectionChunk<TModel>
     where TModel : IModel
 {
     public List<TModel> Models { get; set; } = new();
