@@ -1,73 +1,89 @@
+using System.Linq.Expressions;
 using RaccoonSql.Core.Storage;
 
 namespace RaccoonSql.Core;
 
-public class ModelSet<TData>
-    where TData : IModel
+public class ModelSet<TModel>
+    where TModel : IModel
 {
-    private readonly StorageEngine _storageEngine;
     private readonly ModelStoreOptions _modelStoreOptions;
 
-    internal ModelSet(string? setName, 
-        StorageEngine storageEngine,
+    private readonly ModelCollection<TModel> _modelCollection;
+
+    private Dictionary<string, IIndex> _indices = [];
+
+    internal ModelSet(ModelCollection<TModel> modelCollection,
         ModelStoreOptions modelStoreOptions)
     {
-        _storageEngine = storageEngine;
+        _modelCollection = modelCollection;
         _modelStoreOptions = modelStoreOptions;
-        
-        SetName = typeof(TData).FullName! + "$" + (setName ?? "");
     }
 
-    private string SetName { get; }
-    
-    public void Insert(TData data, ConflictBehavior? conflictBehavior = null)
+    public ModelSet<TModel> WithIndex<T>(Expression<Func<TModel,T>> func, string? name = null)
+    where T : IComparable<T>, IEquatable<T>
     {
-        var storageInfo = _storageEngine.GetStorageInfo<TData>(SetName, data.Id);
+        if (name == null)
+        {
+            name = func.ToString();
+        }
+
+        if (_indices.ContainsKey(name))
+        {
+            throw new ArgumentException($"index with name {name} already exists");
+        }
+        _indices[name] = new Index();
+        return this;
+    }
+    
+    public void Insert(TModel data, ConflictBehavior? conflictBehavior = null)
+    {
+        var storageInfo = _modelCollection.GetStorageInfo(data.Id);
         if ((conflictBehavior ?? _modelStoreOptions.DefaultInsertConflictBehavior).ShouldThrow(storageInfo.Exists))
-            throw new DuplicateIdException(typeof(TData), data.Id);
-        _storageEngine.Write(storageInfo, data);
+            throw new DuplicateIdException(typeof(TModel), data.Id);
+        _modelCollection.Write(data, storageInfo.ChunkInfo);
     }
 
     public bool Exists(Guid id)
     {
-        var storageInfo = _storageEngine.GetStorageInfo<TData>(SetName, id);
+        var storageInfo = _modelCollection.GetStorageInfo(id);
         return storageInfo.Exists;
     }
 
-    public TData? Find(Guid id, ConflictBehavior? conflictBehavior = null)
+    public TModel? Find(Guid id, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _storageEngine.GetStorageInfo<TData>(SetName, id);
+        var storageInfo = _modelCollection.GetStorageInfo(id);
         if ((conflictBehavior ?? _modelStoreOptions.FindDefaultConflictBehavior).ShouldThrow(!storageInfo.Exists))
-            throw new IdNotFoundException(typeof(TData), id);
-        if (!storageInfo.Exists)
-            return default;
-        return _storageEngine.Read<TData>(storageInfo);
+            throw new IdNotFoundException(typeof(TModel), id);
+        return !storageInfo.ChunkInfo.HasValue 
+            ? default 
+            : _modelCollection.Read(storageInfo.ChunkInfo!.Value);
     }
 
-    public IEnumerable<TData> All()
+    public IEnumerable<TModel> All()
     {
-        return _storageEngine.All<TData>(SetName);
+        return _modelCollection.GetAllRows().Select(x => x.Model);
     }
 
-    public void Update(TData data, ConflictBehavior? conflictBehavior = null)
+    public void Update(TModel data, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _storageEngine.GetStorageInfo<TData>(SetName, data.Id);
+        var storageInfo = _modelCollection.GetStorageInfo(data.Id);
         if ((conflictBehavior ?? _modelStoreOptions.DefaultUpdateConflictBehavior).ShouldThrow(!storageInfo.Exists))
-            throw new IdNotFoundException(typeof(TData), data.Id);
-        _storageEngine.Write(storageInfo, data);
+            throw new IdNotFoundException(typeof(TModel), data.Id);
+        _modelCollection.Write(data, storageInfo.ChunkInfo);
     }
 
-    public void Upsert(TData data)
+    public void Upsert(TModel data)
     {
-        var storageInfo = _storageEngine.GetStorageInfo<TData>(SetName, data.Id);
-        _storageEngine.Write(storageInfo, data);
+        var storageInfo = _modelCollection.GetStorageInfo(data.Id);
+        _modelCollection.Write(data, storageInfo.ChunkInfo);
     }
 
     public void Remove(Guid id, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _storageEngine.GetStorageInfo<TData>(SetName, id);
+        var storageInfo = _modelCollection.GetStorageInfo(id);
         if ((conflictBehavior ?? _modelStoreOptions.DefaultRemoveConflictBehavior).ShouldThrow(!storageInfo.Exists)) 
-            throw new IdNotFoundException(typeof(TData), id);
-        _storageEngine.Delete<TData>(storageInfo);
+            throw new IdNotFoundException(typeof(TModel), id);
+        if (storageInfo.ChunkInfo != null) 
+            _modelCollection.Delete(storageInfo.ChunkInfo.Value);
     }
 }

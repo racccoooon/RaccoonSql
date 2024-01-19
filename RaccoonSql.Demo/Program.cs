@@ -44,6 +44,15 @@ foreach (var person in persons.All())
     heightIndex.Insert(person.Height, person.Id);
     bdayIndex.Insert(person.Birthday, person.Id);
 }
+
+foreach (var guid in heightIndex.FunkyRange(150, 150, false, false, false))
+{
+    heightIndex.Remove(150, guid);
+}
+
+Debug.Assert(heightIndex.FunkyRange(150, 150, false, false, false).Count() == 0);
+
+
 void range<T>(BPlusTree<T, Guid> index, T from, T to) where T : IComparable<T>, IEquatable<T>
 {
     var count = 100;
@@ -73,14 +82,14 @@ foreach (var t in personModels)
 
 //Console.WriteLine(TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds).Humanize());
 
-// range(heightIndex, 0, 90);
-// range(heightIndex, 150, 150);
-// range(heightIndex, 160, 180);
-// range(heightIndex, 150, 156);
-// range(heightIndex, 140, 200);
-// range(heightIndex, 130, 210);
-// range(heightIndex, 110, 220);
+range(heightIndex, 0, 90);
+range(heightIndex, 150, 150);
+range(heightIndex, 160, 180);
+range(heightIndex, 150, 156);
+range(heightIndex, 140, 200);
+range(heightIndex, 130, 210);
+range(heightIndex, 110, 220);
 
 range(bdayIndex, DateOnly.Parse("2007-11-23"), DateOnly.Parse("2010-01-02"));
 range(bdayIndex, DateOnly.Parse("1994-12-16"), DateOnly.Parse("1996-09-11"));
-range(bdayIndex, DateOnly.Parse("1000-12-16"), DateOnly.Parse("2100-09-11"));
+range(bdayIndex, DateOnly.Parse("1000-12-16"), DateOnly.Parse("1996-09-11"));

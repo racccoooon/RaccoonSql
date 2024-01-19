@@ -176,3 +176,7 @@ public interface IIndex
 {
     public IEnumerable<Guid> Scan(object? from, object? to, bool fromInclusive, bool toInclusive);
 }
+
+class Index : IIndex
+{
+}

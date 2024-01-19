@@ -9,14 +9,24 @@ namespace RaccoonSql.Core;
 public class ModelStore(
     ModelStoreOptions options)
 {
-    private StorageEngine StorageEngine { get; } = new(new FileSystemPersistenceEngine(
+    private FileSystemPersistenceEngine PersistenceEngine { get; } = new(
         new FileSystem(),
         options.Root,
-        new JsonSerializationEngine()));
+        new JsonSerializationEngine());
+    
+    private readonly Dictionary<string, object> _modelSets = new();
 
-    public ModelSet<TData> Set<TData>(string? setName = null) where TData : IModel
+    public ModelSet<TModel> Set<TModel>(string? setName = null) where TModel : IModel
     {
-        return new ModelSet<TData>(setName, StorageEngine, options);
+        var name = typeof(TModel).FullName! + "$" + (setName ?? "");
+        
+        if (!_modelSets.TryGetValue(name, out var set))
+        {
+            set = new ModelSet<TModel>(new ModelCollection<TModel>(name, PersistenceEngine), options);
+            _modelSets[name] = set;
+        }
+        
+        return (ModelSet<TModel>)set;
     }
 }
 

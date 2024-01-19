@@ -28,6 +28,14 @@ public class BPlusTree<TKey, TValue>
         _root.CheckConsistency();
     }
 
+    public void Remove(TKey key, TValue value)
+    {
+        var (leaf, idx) = FindPosition(key, true, false);
+        if (leaf == null) return;
+        if (idx == -1 || idx == leaf.Keys.Count) return;
+        leaf.Values![idx].Remove(value);
+    }
+
     
     public IEnumerable<TValue> FunkyRange(TKey? from, TKey? to, bool fromExclusive, bool toExclusive, bool backwards)
     {
