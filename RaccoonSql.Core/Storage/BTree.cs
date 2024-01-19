@@ -36,16 +36,15 @@ public class BPlusTree<TKey, TValue>
         leaf.Values![idx].Remove(value);
     }
 
-    
-    public IEnumerable<TValue> FunkyRange(TKey? from, TKey? to, bool fromExclusive, bool toExclusive, bool backwards)
+    public IEnumerable<TValue> FunkyRange(TKey from, TKey to, bool fromSet, bool toSet, bool fromExclusive, bool toExclusive, bool backwards)
     {
-        FunkyRangeValidate(from, to, backwards);
+        FunkyRangeValidate(from, to, fromSet, toSet, backwards);
         
         var fromLeaf = backwards ? _lastLeaf : _firstLeaf;
         var toLeaf = backwards ? _firstLeaf : _lastLeaf;
         var fromIdx = backwards ? _lastLeaf.Keys.Count : 0;
         var toIdx = backwards ? 0 : _lastLeaf.Keys.Count;
-        if (from != null)
+        if (fromSet)
         {
             var fromPos = FindPosition(from, !fromExclusive, backwards);
             if (fromPos.leaf != null)
@@ -55,7 +54,7 @@ public class BPlusTree<TKey, TValue>
             }
         }
 
-        if (to != null)
+        if (toSet)
         {
             var toPos = FindPosition(to, !toExclusive, !backwards);
             if (toPos.leaf != null)
@@ -96,9 +95,9 @@ public class BPlusTree<TKey, TValue>
     }
 
     [Conditional("DEBUG")]
-    private static void FunkyRangeValidate(TKey? from, TKey? to, bool backwards)
+    private static void FunkyRangeValidate(TKey from, TKey to, bool fromSet, bool toSet, bool backwards)
     {
-        if (from == null || to == null) return;
+        if (!fromSet || !toSet) return;
         if (backwards)
         {
             Debug.Assert(from.CompareTo(to) >= 0);

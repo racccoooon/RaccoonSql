@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using Bogus;
 using Humanizer;
 using RaccoonSql.Core;
 using RaccoonSql.Core.Storage;
@@ -37,21 +36,6 @@ foreach (var t in personModels)
 
 return;
 */
-var heightIndex = new BPlusTree<int, Guid>(10);
-var bdayIndex = new BPlusTree<DateOnly, Guid>(100);
-foreach (var person in persons.All())
-{
-    heightIndex.Insert(person.Height, person.Id);
-    bdayIndex.Insert(person.Birthday, person.Id);
-}
-
-foreach (var guid in heightIndex.FunkyRange(150, 150, false, false, false))
-{
-    heightIndex.Remove(150, guid);
-}
-
-Debug.Assert(heightIndex.FunkyRange(150, 150, false, false, false).Count() == 0);
-
 
 void range<T>(BPlusTree<T, Guid> index, T from, T to) where T : IComparable<T>, IEquatable<T>
 {
@@ -62,7 +46,7 @@ void range<T>(BPlusTree<T, Guid> index, T from, T to) where T : IComparable<T>, 
     for (var i = 0; i < count; i++)
     {
         indexStopwatch.Start();
-        indexResults = index.FunkyRange(from, to, false, false, from.CompareTo(to) > 0).ToList();
+        indexResults = index.FunkyRange(from, to, true, true, false, false, from.CompareTo(to) > 0).ToList();
         indexStopwatch.Stop();
     }
     
@@ -70,26 +54,97 @@ void range<T>(BPlusTree<T, Guid> index, T from, T to) where T : IComparable<T>, 
 }
 
 
-//var stopwatch = Stopwatch.StartNew();
+// select * from persons where height > 180 or "20.1.2002" < birthday < "12.12.2012"::date order by address.city 
+var sortComparer = new QueryPlanSortComparer<PersonModel, string>(x => x.Address.City);
+var queryPlan = new QueryPlan<PersonModel>
+{
+    Root = new QueryPlanLimit<PersonModel>
+    {
+        Skip = 10,
+        Take = 10,
+        Child = new QueryPlanMergeSorted<PersonModel>
+        {
+            Children = [
+                new QueryPlanSort<PersonModel>
+                {
+                    Child = new QueryPlanIndexScan<PersonModel>
+                    {
+                        Descending = false,
+                        Name = "btree:Height",
+                        Ranges = [new ScanRange
+                        {
+                            Start = 180,
+                            End = 0,
+                            StartSet = true,
+                            EndSet = false,
+                            StartInclusive = false,
+                            EndInclusive = false,
+                        }]
+                    },
+                    Comparer = sortComparer,
+                },
+                new QueryPlanSort<PersonModel>
+                {
+                    Child = new QueryPlanIndexScan<PersonModel>
+                    {
+                        Descending = false,
+                        Name = "btree:Birthday",
+                        Ranges = [new ScanRange
+                        {
+                            Start = DateOnly.Parse("1-20-2002"),
+                            End = DateOnly.Parse("12-12-2012"),
+                            StartSet = true,
+                            EndSet = true,
+                            StartInclusive = false,
+                            EndInclusive = false,
+                        }]
+                    },
+                    Comparer = sortComparer,
+                }
+            ],
+            Comparer = sortComparer,
+        }
+    } 
+};
+
+var stopwatch = Stopwatch.StartNew();
+
+List<Row<PersonModel>> list = [];
+for (int i = 0; i < 100; i++)
+{
+    list = queryPlan.Execute(persons).ToList();
+}
+
+stopwatch.Stop();
+
+foreach (var row in list)
+{
+    Debug.Assert(
+        row.Model.Height > 180
+        || (row.Model.Birthday > DateOnly.Parse("01/20/2002")
+        && row.Model.Birthday < DateOnly.Parse("12/12/2012")));
+}
+
+Console.WriteLine(list.Select(x => x.Model.Address.City).Humanize());
+
 /*
 foreach (var t in personModels)
 {
     persons.Insert(t);
 }*/
 
-//stopwatch.Stop();
 
 
-//Console.WriteLine(TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds).Humanize());
+Console.WriteLine(TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds).Humanize());
 
-range(heightIndex, 0, 90);
-range(heightIndex, 150, 150);
-range(heightIndex, 160, 180);
-range(heightIndex, 150, 156);
-range(heightIndex, 140, 200);
-range(heightIndex, 130, 210);
-range(heightIndex, 110, 220);
-
-range(bdayIndex, DateOnly.Parse("2007-11-23"), DateOnly.Parse("2010-01-02"));
-range(bdayIndex, DateOnly.Parse("1994-12-16"), DateOnly.Parse("1996-09-11"));
-range(bdayIndex, DateOnly.Parse("1000-12-16"), DateOnly.Parse("1996-09-11"));
+// range(heightIndex, 0, 90);
+// range(heightIndex, 150, 150);
+// range(heightIndex, 160, 180);
+// range(heightIndex, 150, 156);
+// range(heightIndex, 140, 200);
+// range(heightIndex, 130, 210);
+// range(heightIndex, 110, 220);
+//
+// range(bdayIndex, DateOnly.Parse("2007-11-23"), DateOnly.Parse("2010-01-02"));
+// range(bdayIndex, DateOnly.Parse("1994-12-16"), DateOnly.Parse("1996-09-11"));
+// range(bdayIndex, DateOnly.Parse("1000-12-16"), DateOnly.Parse("1996-09-11"));

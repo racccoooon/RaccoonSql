@@ -87,6 +87,8 @@ public class FileSystemPersistenceEngine(
         }
 
         WriteChunkInternal(path, changeFile, chunk);
+        
+        chunk.Init();
 
         return chunk;
     }

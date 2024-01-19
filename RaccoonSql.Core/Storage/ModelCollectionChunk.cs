@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 using MemoryPack;
 
 namespace RaccoonSql.Core.Storage;
@@ -10,8 +12,18 @@ public partial class ModelCollectionChunk<TModel>
     public List<TModel> Models { get; set; } = new();
 
     public uint ModelCount => (uint)Models.Count;
+    
+    [JsonIgnore]
     public Dictionary<Guid, uint> ModelOffset { get; set; } = new();
 
+    internal void Init()
+    {
+        for (uint i = 0; i < Models.Count; i++)
+        {
+            ModelOffset[Models[(int)i].Id] = i;
+        }
+    }
+    
     public ChunkChange WriteModel(uint offset, TModel model)
     {
         Debug.Assert(offset <= Models.Count, "offset <= _models.Count");
@@ -35,6 +47,7 @@ public partial class ModelCollectionChunk<TModel>
         };
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TModel GetModel(uint offset)
     {
         Debug.Assert(offset < Models.Count, "offset < _models.Count");
@@ -61,11 +74,14 @@ public partial class ModelCollectionChunk<TModel>
     {
         if (change.Add)
         {
+            ModelOffset[change.Model.Id] = (uint)Models.Count;
             Models.Add((TModel)change.Model);
         }
         else
         {
             Models[(int)change.Offset] = (TModel)change.Model;
+            ModelOffset[change.Model.Id] = change.Offset;
         }
+        
     }
 }

@@ -5,6 +5,26 @@ public interface IQueryPlanNode<TModel> where TModel : IModel
     internal IEnumerable<Row<TModel>> Execute(ModelCollection<TModel> collection);
 }
 
+
+public class QueryPlanSortComparer<TModel, T> : IComparer<Row<TModel>> where T : IComparable<T> where TModel : IModel
+{
+    private readonly Func<TModel, T> _accessor;
+
+    public QueryPlanSortComparer(Func<TModel, T> accessor)
+    {
+        _accessor = accessor;
+    }
+    
+    public int Compare(Row<TModel> x, Row<TModel> y)
+    {
+        var cmp = _accessor(x.Model).CompareTo(_accessor(y.Model));
+        if (cmp != 0) return cmp;
+        return x.ChunkInfo.CompareTo(y.ChunkInfo);
+        
+        return _accessor(x.Model).CompareTo(_accessor(y.Model));
+    }
+}
+
 public class QueryPlanMergeSorted<TModel> : IQueryPlanNode<TModel> where TModel : IModel
 {
     public required IReadOnlyList<IQueryPlanNode<TModel>> Children { get; init; }
@@ -138,9 +158,45 @@ public class QueryPlanPredicateFilter<TModel> : IQueryPlanNode<TModel> where TMo
     }
 }
 
+public class QueryPlanLimit<TModel> : IQueryPlanNode<TModel> where TModel : IModel
+{
+    public required int Skip { get; init; }
+    public required int? Take { get; init; }
+    public required IQueryPlanNode<TModel> Child { get; init; }
+    
+    public IEnumerable<Row<TModel>> Execute(ModelCollection<TModel> collection)
+    {
+        using var enumerator = Child.Execute(collection).GetEnumerator();
+        var valid = enumerator.MoveNext();
+        for (var i = 0; valid && i < Skip; i++)
+        {
+            valid = enumerator.MoveNext();
+        }
+
+        if (Take.HasValue)
+        {
+            for (var i = 0; valid && i < Take; i++)
+            {
+                yield return enumerator.Current;
+                valid = enumerator.MoveNext();
+            }
+        }
+        else
+        {
+            while (valid)
+            {
+                yield return enumerator.Current;
+                valid = enumerator.MoveNext();
+            }
+        }
+        
+    }
+}
+
 public class QueryPlanIndexScan<TModel> : IQueryPlanNode<TModel> where TModel : IModel
 {
     public required string Name { get; init; }
+    public required bool Descending { get; init; }
     public IReadOnlyList<ScanRange> Ranges { get; init; } = [];
 
     IEnumerable<Row<TModel>> IQueryPlanNode<TModel>.Execute(ModelCollection<TModel> collection)
@@ -148,15 +204,19 @@ public class QueryPlanIndexScan<TModel> : IQueryPlanNode<TModel> where TModel : 
         var index = collection.GetIndex(Name);
         foreach (var range in Ranges)
         {
-            foreach (var guid in index.Scan(range.Start,
-                         range.End, range.StartInclusive, range.EndInclusive))
+            foreach (var model in index.Scan(range.Start,
+                         range.End, 
+                         range.StartSet,
+                         range.EndSet,
+                         range.StartInclusive,
+                         range.EndInclusive, 
+                         Descending))
             {
-                var chunkInfo = collection.GetChunkInfo(guid);
 
                 yield return new Row<TModel>
                 {
-                    ChunkInfo = chunkInfo,
-                    Model = collection.Read(chunkInfo)
+                    ChunkInfo = collection.GetChunkInfo(model.Id),
+                    Model = (TModel)model,
                 };
             }
         }
@@ -165,10 +225,12 @@ public class QueryPlanIndexScan<TModel> : IQueryPlanNode<TModel> where TModel : 
 
 public readonly struct ScanRange
 {
-    public object? Start { get; init; }
-    public object? End { get; init; }
-    public bool StartInclusive { get; init; }
-    public bool EndInclusive { get; init; }
+    public required object Start { get; init; }
+    public required object End { get; init; }
+    public required bool StartSet { get; init; }
+    public required bool EndSet { get; init; }
+    public required bool StartInclusive { get; init; }
+    public required bool EndInclusive { get; init; }
 }
 
 public class QueryPlanSort<TModel> : IQueryPlanNode<TModel> where TModel : IModel
@@ -197,8 +259,8 @@ public class QueryPlan<TModel> where TModel : IModel
     public required IQueryPlanNode<TModel> Root { get; init; }
 
 
-    internal IEnumerable<Row<TModel>> Execute(ModelCollection<TModel> collection)
+    public IEnumerable<Row<TModel>> Execute(ModelSet<TModel> collection)
     {
-        return Root.Execute(collection);
+        return Root.Execute(collection._modelCollection);
     }
 }

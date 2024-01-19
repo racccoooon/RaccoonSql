@@ -1,10 +1,14 @@
+using System.Diagnostics;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using RaccoonSql.Core.Storage.Persistence;
 using RaccoonSql.Core.Utils;
+using RaccoonSql.Demo.Models;
 
 namespace RaccoonSql.Core.Storage;
 
-internal class ModelCollection<TModel>
+public class ModelCollection<TModel>
     where TModel : IModel
 {
     private const int ModelsPerChunk = 512;
@@ -14,11 +18,37 @@ internal class ModelCollection<TModel>
     private readonly IPersistenceEngine _persistenceEngine;
     private ModelCollectionChunk<TModel>[] _chunks;
     private uint _modelCount;
+    private Dictionary<string, IIndex> _bTreeIndices = [];
+    private Dictionary<string, IIndex> _hashIndices = [];
+
+    private IEnumerable<IIndex> AllIndices => _bTreeIndices.Values.Concat(_hashIndices.Values);
 
     public ModelCollection(string name, IPersistenceEngine persistenceEngine)
     {
         _name = name;
         _persistenceEngine = persistenceEngine;
+
+        foreach (var x in typeof(TModel).GetProperties()
+                     .Select(prop => new { Prop = prop, Attribute = prop.GetCustomAttribute<IndexAttribute>() })
+                     .Where(x => x.Attribute != null))
+        {
+            var indexType = x.Attribute!.Type;
+            if (indexType == null)
+            {
+                // TODO: automatically determine appropriate index type
+                indexType = IndexType.BTree;
+            }
+
+            switch (indexType)
+            {
+                case IndexType.BTree:
+                    CreateBTreeIndexFromProp(x.Prop);
+                    break;
+                case IndexType.Hash:
+                default:
+                    throw new NotImplementedException();
+            }
+        }
 
         var chunkCount = _persistenceEngine.GetChunkCount(name);
 
@@ -26,9 +56,68 @@ internal class ModelCollection<TModel>
         for (uint i = 0; i < _chunks.Length; i++)
         {
             var chunk = persistenceEngine.LoadChunk<TModel>(name, i, typeof(TModel));
+
+            foreach (var model in chunk.Models)
+            {
+                foreach (var index in AllIndices)
+                {
+                    index.Insert(model);
+                }
+            }
+
             _chunks[i] = chunk;
             _modelCount += chunk.ModelCount;
         }
+    }
+
+    public void CreateBTreeIndexFromProp(PropertyInfo prop)
+    {
+        if (!prop.PropertyType.IsAssignableTo(typeof(IEquatable<>).MakeGenericType(prop.PropertyType)))
+        {
+            throw new ArgumentException($"index for {prop.Name}: must be IEquatable");
+        }
+
+        if (!prop.PropertyType.IsAssignableTo(typeof(IComparable<>).MakeGenericType(prop.PropertyType)))
+        {
+            throw new ArgumentException($"index for {prop.Name}: must be IComparable");
+        }
+
+        var param = Expression.Parameter(typeof(TModel));
+        var memberAccess = Expression.MakeMemberAccess(param, prop);
+        var lambdaExpression = Expression.Lambda(memberAccess, [param]);
+
+        var createBTreeIndex = GetType().GetMethod(nameof(CreateBTreeIndex))!.MakeGenericMethod(prop.PropertyType);
+        createBTreeIndex.Invoke(this, [lambdaExpression]);
+    }
+
+    public void CreateBTreeIndex<T>(Expression<Func<TModel, T>> expr)
+        where T : IComparable<T>, IEquatable<T>
+    {
+        var body = expr.Body as MemberExpression;
+        if (body is null)
+        {
+            throw new ArgumentException("index function for btree must be member expression");
+        }
+
+        Debug.Assert(expr.Parameters.Count == 1);
+        if (expr.Parameters[0] != body.Expression)
+        {
+            throw new ArgumentException("index function for btree must be member expression");
+        }
+
+        if (body.Member is not PropertyInfo propertyInfo)
+        {
+            throw new ArgumentException("index can only be created on a property");
+        }
+
+        if (_bTreeIndices.ContainsKey(propertyInfo.Name))
+        {
+            throw new ArgumentException($"index for property {propertyInfo.Name} already exists");
+        }
+
+        var func = expr.Compile();
+
+        _bTreeIndices[propertyInfo.Name] = new BTreeIndex<T>(x => func((TModel)x), 100); // TODO btree t size
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -70,18 +159,29 @@ internal class ModelCollection<TModel>
         }
     }
 
-    public void Write(TModel data, ChunkInfo? chunkInfo)
+    public void Write(TModel model, ChunkInfo? chunkInfo)
     {
-        if (chunkInfo is null)
+        if (chunkInfo is not null)
+        {
+            foreach (var index in AllIndices)
+            {
+                index.Update(_chunks[chunkInfo.Value.ChunkId].GetModel(chunkInfo.Value.Offset), model);
+            }
+        }
+        else
         {
             _modelCount++;
             RehashIfNeeded();
-            chunkInfo = DetermineChunkForInsert(data.Id);
+            chunkInfo = DetermineChunkForInsert(model.Id);
+            foreach (var index in AllIndices)
+            {
+                index.Insert(model);
+            }
         }
 
         var chunk = _chunks[chunkInfo.Value.ChunkId];
 
-        var change = chunk.WriteModel(chunkInfo.Value.Offset, data);
+        var change = chunk.WriteModel(chunkInfo.Value.Offset, model);
         _persistenceEngine.WriteChunk(_name, chunkInfo.Value.ChunkId, chunk, change);
     }
 
@@ -131,10 +231,13 @@ internal class ModelCollection<TModel>
     public void Delete(ChunkInfo chunkInfo)
     {
         var chunk = _chunks[chunkInfo.ChunkId];
-        // TODO: what?
         var model = chunk.GetModel(chunkInfo.Offset);
+        foreach (var index in AllIndices)
+        {
+            index.Remove(model);
+        }
 
-        var movedModelId = chunk.DeleteModel(chunkInfo.Offset);
+        chunk.DeleteModel(chunkInfo.Offset);
     }
 
     public IEnumerable<Row<TModel>> GetAllRows()
@@ -162,7 +265,15 @@ internal class ModelCollection<TModel>
 
     public IIndex GetIndex(string name)
     {
-        throw new NotImplementedException();
+        if (name.StartsWith("btree:"))
+        {
+            return _bTreeIndices[name["btree:".Length..]];
+        }
+        if (name.StartsWith("hash:"))
+        {
+            return _hashIndices[name["btree:".Length..]];
+        }
+        throw new ArgumentOutOfRangeException(nameof(name), $"unsupported index type: {name}");
     }
 }
 
@@ -174,9 +285,44 @@ public readonly struct Row<TModel> where TModel : IModel
 
 public interface IIndex
 {
-    public IEnumerable<Guid> Scan(object? from, object? to, bool fromInclusive, bool toInclusive);
+    public IEnumerable<IModel> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive, bool toInclusive, bool backwards);
+    void Insert(IModel model);
+    void Update(IModel oldModel, IModel model);
+    void Remove(IModel model);
 }
 
-class Index : IIndex
+public class BTreeIndex<T> : IIndex
+    where T : IComparable<T>, IEquatable<T>
 {
+    private readonly Func<IModel, T> _func;
+    private readonly BPlusTree<T, IModel> _tree;
+
+    public BTreeIndex(Func<IModel, T> func, int t)
+    {
+        _func = func;
+        _tree = new BPlusTree<T, IModel>(t);
+    }
+
+    public IEnumerable<IModel> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive, bool toInclusive, bool backwards)
+    {
+        return _tree.FunkyRange((T)from ?? default, (T)to ?? default, fromSet, toSet, !fromInclusive, !toInclusive, backwards);
+    }
+
+    public void Insert(IModel model)
+    {
+        _tree.Insert(_func(model), model);
+    }
+
+    public void Update(IModel oldModel, IModel model)
+    {
+        if (_func(oldModel).Equals(_func(model))) return;
+        
+        Remove(oldModel);
+        Insert(model);
+    }
+
+    public void Remove(IModel model)
+    {
+        _tree.Remove(_func(model), model);
+    }
 }

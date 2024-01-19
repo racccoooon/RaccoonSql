@@ -8,31 +8,13 @@ public class ModelSet<TModel>
 {
     private readonly ModelStoreOptions _modelStoreOptions;
 
-    private readonly ModelCollection<TModel> _modelCollection;
-
-    private Dictionary<string, IIndex> _indices = [];
+    internal readonly ModelCollection<TModel> _modelCollection;
 
     internal ModelSet(ModelCollection<TModel> modelCollection,
         ModelStoreOptions modelStoreOptions)
     {
         _modelCollection = modelCollection;
         _modelStoreOptions = modelStoreOptions;
-    }
-
-    public ModelSet<TModel> WithIndex<T>(Expression<Func<TModel,T>> func, string? name = null)
-    where T : IComparable<T>, IEquatable<T>
-    {
-        if (name == null)
-        {
-            name = func.ToString();
-        }
-
-        if (_indices.ContainsKey(name))
-        {
-            throw new ArgumentException($"index with name {name} already exists");
-        }
-        _indices[name] = new Index();
-        return this;
     }
     
     public void Insert(TModel data, ConflictBehavior? conflictBehavior = null)
