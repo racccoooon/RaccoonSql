@@ -53,7 +53,7 @@ void range<T>(BPlusTree<T, Guid> index, T from, T to) where T : IComparable<T>, 
     for (var i = 0; i < count; i++)
     {
         indexStopwatch.Start();
-        indexResults = index.Range(from, to, false, false).ToList();
+        indexResults = index.FunkyRange(from, to, false, false, from.CompareTo(to) > 0).ToList();
         indexStopwatch.Stop();
     }
     
@@ -82,3 +82,5 @@ foreach (var t in personModels)
 // range(heightIndex, 110, 220);
 
 range(bdayIndex, DateOnly.Parse("2007-11-23"), DateOnly.Parse("2010-01-02"));
+range(bdayIndex, DateOnly.Parse("1994-12-16"), DateOnly.Parse("1996-09-11"));
+range(bdayIndex, DateOnly.Parse("1000-12-16"), DateOnly.Parse("2100-09-11"));

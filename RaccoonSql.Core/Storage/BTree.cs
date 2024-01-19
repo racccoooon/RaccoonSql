@@ -1,12 +1,20 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace RaccoonSql.Core.Storage;
 
-public class BPlusTree<TKey, TValue>(int t)
+public class BPlusTree<TKey, TValue>
     where TKey : IComparable<TKey>, IEquatable<TKey>
 {
-    private BPlusTreeNode<TKey, TValue> _root = new BPlusTreeNode<TKey, TValue>(t);
+    private BPlusTreeNode<TKey, TValue> _root;
+    private BPlusTreeNode<TKey, TValue> _firstLeaf;
+    private BPlusTreeNode<TKey, TValue> _lastLeaf;
+
+    public BPlusTree(int t)
+    {
+        _firstLeaf = _lastLeaf = _root = new BPlusTreeNode<TKey, TValue>(t);
+    }
 
     public void Insert(TKey key, TValue value)
     {
@@ -20,9 +28,99 @@ public class BPlusTree<TKey, TValue>(int t)
         _root.CheckConsistency();
     }
 
-    public IEnumerable<TValue> Range(TKey from, TKey to, bool fromExclusive, bool toExclusive)
+    
+    public IEnumerable<TValue> FunkyRange(TKey? from, TKey? to, bool fromExclusive, bool toExclusive, bool backwards)
+    {
+        FunkyRangeValidate(from, to, backwards);
+        
+        var fromLeaf = backwards ? _lastLeaf : _firstLeaf;
+        var toLeaf = backwards ? _firstLeaf : _lastLeaf;
+        var fromIdx = backwards ? _lastLeaf.Keys.Count : 0;
+        var toIdx = backwards ? 0 : _lastLeaf.Keys.Count;
+        if (from != null)
+        {
+            var fromPos = FindPosition(from, !fromExclusive, backwards);
+            if (fromPos.leaf != null)
+            {
+                fromLeaf = fromPos.leaf;
+                fromIdx = fromPos.idx;
+            }
+        }
+
+        if (to != null)
+        {
+            var toPos = FindPosition(to, !toExclusive, !backwards);
+            if (toPos.leaf != null)
+            {
+                toLeaf = toPos.leaf;
+                toIdx = toPos.idx;
+            }
+        }
+
+        var currentLeaf = fromLeaf;
+            
+        while (true)
+        {
+            var start = backwards ? currentLeaf!.Keys.Count : 0;
+            var end = backwards ? 0 : currentLeaf!.Keys.Count;
+            if (currentLeaf == fromLeaf)
+            {
+                start = fromIdx;
+            }
+
+            if (currentLeaf == toLeaf)
+            {
+                end = toIdx;
+            }
+
+            for (var i = start; i < end; i += (backwards ? -1 : 1))
+            {
+                foreach (var value in currentLeaf!.Values![i])
+                {
+                    yield return value;
+                }
+            }
+
+            if (currentLeaf == toLeaf) break;
+            currentLeaf = backwards ? currentLeaf!.PreviousLeaf : currentLeaf!.NextLeaf;
+        }
+        
+    }
+
+    [Conditional("DEBUG")]
+    private static void FunkyRangeValidate(TKey? from, TKey? to, bool backwards)
+    {
+        if (from == null || to == null) return;
+        if (backwards)
+        {
+            Debug.Assert(from.CompareTo(to) >= 0);
+        }
+        else
+        {
+            Debug.Assert(from.CompareTo(to) <= 0);
+        }
+    }
+
+    public IEnumerable<TValue> Range(TKey? from, TKey? to, bool fromExclusive, bool toExclusive)
     {
         var reverse = to.CompareTo(from) < 0;
+        using var enumerator = RangeFrom(from, reverse).GetEnumerator();
+        var valid = enumerator.MoveNext();
+        if (fromExclusive)
+        {
+            while (valid && enumerator.Current.key.Equals(from))
+            {
+                valid = enumerator.MoveNext();
+            }
+        }
+
+        while (valid && (!toExclusive || enumerator.Current.key.Equals(to)))
+        {
+            var values = enumerator.Current.values;
+
+            valid = enumerator.MoveNext();
+        }
+
         foreach (var (key, values) in RangeFrom(from, reverse))
         {
             if (fromExclusive && key.Equals(from)) continue;
@@ -34,6 +132,67 @@ public class BPlusTree<TKey, TValue>(int t)
                 yield return value;
             }
         }
+    }
+
+    private static int BinarySearch(IReadOnlyList<TKey> list, TKey value, bool inclusive, bool less)
+    {
+        var start = 0;
+        var end = list.Count;
+        int index = default;
+        while (true)
+        {
+            index = (end + start) / 2;
+            var cmp = value.CompareTo(list[index]);
+            if (cmp == 0) break;
+            if (cmp > 0)
+            {
+                start = index;
+            }
+            else
+            {
+                end = index;
+            }
+
+            if (start == end || start - end == 1 || end - start == 1)
+            {
+                break;
+            }
+        }
+
+        var cmp3 = value.CompareTo(list[index]);
+        return cmp3 switch
+        {
+            0 when inclusive => index,
+
+            0 when less => index - 1,
+            0 when !less => index + 1,
+
+            > 0 when less => index,
+            > 0 when !less => index + 1,
+
+            < 0 when less => index - 1,
+            < 0 when !less => index,
+
+            _ => throw new ArgumentOutOfRangeException()
+        };
+    }
+
+    private (BPlusTreeNode<TKey, TValue>? leaf, int idx) FindPosition(TKey key, bool inclusive, bool less)
+    {
+        var leaf = _root.FindLeaf(key);
+        var idx = BinarySearch(leaf.Keys, key, inclusive, less);
+        if (idx == -1)
+        {
+            leaf = leaf.PreviousLeaf;
+            idx = (leaf?.Keys.Count ?? 0) - 1;
+        }
+        else if (idx == leaf.Keys.Count)
+        {
+            leaf = leaf.NextLeaf;
+            idx = 0;
+        }
+
+        return (leaf, idx);
     }
 
     private IEnumerable<(TKey key, IEnumerable<TValue> values)> RangeFrom(TKey from, bool backwards)
@@ -156,7 +315,7 @@ internal class BPlusTreeNode<TKey, TValue>(int t)
                 Debug.Assert(promoted.Children != null);
                 Debug.Assert(promoted.Children.Count == 2);
 
-                var promotedIdx = Keys.FindLastIndex(x => promoted.Keys[0].CompareTo(x) >= 0);
+                var promotedIdx = FindLastIndex(promoted);
 
                 Keys.Insert(promotedIdx + 1, promoted.Keys[0]);
 
@@ -215,6 +374,12 @@ internal class BPlusTreeNode<TKey, TValue>(int t)
             Keys = [Keys[splitPos]],
             Values = null,
         };
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int FindLastIndex(BPlusTreeNode<TKey, TValue> promoted)
+    {
+        return Keys.FindLastIndex(x => promoted.Keys[0].CompareTo(x) >= 0);
     }
 
 
