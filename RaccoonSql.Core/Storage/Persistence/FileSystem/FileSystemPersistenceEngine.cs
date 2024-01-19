@@ -191,6 +191,7 @@ public class FileSystemPersistenceEngine(
         using var chunkFileStream = fileSystem.File.Open(path, FileMode.Create);
         serializationEngine.Serialize(chunkFileStream, chunk, chunk.GetType());
         _fileManager.Delete(changeFile);
+        
     }
 
     private void AppendChunkChange(string path, ChunkChange chunkChange)

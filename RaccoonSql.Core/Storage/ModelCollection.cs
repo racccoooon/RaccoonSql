@@ -114,14 +114,31 @@ internal class ModelCollection<TModel>
     public void Delete(ChunkInfo chunkInfo)
     {
         var chunk = _chunks[chunkInfo.ChunkId];
+        // TODO: what?
         var model = chunk.GetModel(chunkInfo.Offset);
 
         var movedModelId = chunk.DeleteModel(chunkInfo.Offset);
     }
 
-    public IEnumerable<StorageInfo> GetStorageInfos()
+    public IEnumerable<TModel> GetAll()
     {
-        return _chunks.SelectMany(x => x.Models)
-            .Select(x => GetStorageInfo(x.Id));
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        foreach (var chunk in _chunks)
+        {
+            foreach (var model in chunk.Models)
+            {
+                yield return model;
+            }
+        }
     }
+
+    public IIndex GetIndex(string name)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+public interface IIndex
+{
+    public IEnumerable<Guid> Scan(object? from, object? to, bool fromInclusive, bool toInclusive);
 }

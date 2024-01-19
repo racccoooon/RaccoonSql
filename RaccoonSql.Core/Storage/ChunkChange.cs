@@ -1,6 +1,6 @@
 namespace RaccoonSql.Core.Storage;
 
-public readonly record struct ChunkChange
+public readonly struct ChunkChange
 {
     public required IModel Model { get; init; }
     public required bool Add { get; init; }
