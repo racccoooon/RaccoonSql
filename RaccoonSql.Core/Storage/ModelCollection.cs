@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using RaccoonSql.Core.Storage.Persistence;
 using RaccoonSql.Core.Utils;
 
@@ -30,6 +31,22 @@ internal class ModelCollection<TModel>
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ChunkInfo GetChunkInfo(Guid id)
+    {
+        unsafe
+        {
+            var guidBuffer = new GuidBuffer(id);
+            var chunkId = guidBuffer.Int[3] % (uint)_chunks.Length;
+            var chunk = _chunks[chunkId];
+            return new ChunkInfo
+            {
+                ChunkId = chunkId,
+                Offset = chunk.ModelOffset[id],
+            };
+        }
+    }
+
     public StorageInfo GetStorageInfo(Guid id)
     {
         unsafe
@@ -59,7 +76,7 @@ internal class ModelCollection<TModel>
         {
             _modelCount++;
             RehashIfNeeded();
-            chunkInfo = DetermineChunk(data.Id);
+            chunkInfo = DetermineChunkForInsert(data.Id);
         }
 
         var chunk = _chunks[chunkInfo.Value.ChunkId];
@@ -68,7 +85,7 @@ internal class ModelCollection<TModel>
         _persistenceEngine.WriteChunk(_name, chunkInfo.Value.ChunkId, chunk, change);
     }
 
-    private ChunkInfo DetermineChunk(Guid id)
+    private ChunkInfo DetermineChunkForInsert(Guid id)
     {
         unsafe
         {
@@ -98,7 +115,7 @@ internal class ModelCollection<TModel>
         {
             foreach (var model in oldChunk.Models)
             {
-                var chunkInfo = DetermineChunk(model.Id);
+                var chunkInfo = DetermineChunkForInsert(model.Id);
                 var chunk = _chunks[chunkInfo.ChunkId];
                 chunk.WriteModel(chunkInfo.Offset, model);
             }
@@ -120,14 +137,25 @@ internal class ModelCollection<TModel>
         var movedModelId = chunk.DeleteModel(chunkInfo.Offset);
     }
 
-    public IEnumerable<TModel> GetAll()
+    public IEnumerable<Row<TModel>> GetAllRows()
     {
         // ReSharper disable once LoopCanBeConvertedToQuery
-        foreach (var chunk in _chunks)
+        for (uint chunkId = 0; chunkId < _chunks.Length; chunkId++)
         {
-            foreach (var model in chunk.Models)
+            var chunk = _chunks[chunkId];
+            for (uint modelOffset = 0; modelOffset < chunk.Models.Count; modelOffset++)
             {
-                yield return model;
+                var model = chunk.Models[(int)modelOffset];
+
+                yield return new Row<TModel>()
+                {
+                    Model = model,
+                    ChunkInfo = new ChunkInfo
+                    {
+                        ChunkId = chunkId,
+                        Offset = modelOffset,
+                    }
+                };
             }
         }
     }
@@ -136,6 +164,12 @@ internal class ModelCollection<TModel>
     {
         throw new NotImplementedException();
     }
+}
+
+public readonly struct Row<TModel> where TModel : IModel
+{
+    public ChunkInfo ChunkInfo { get; init; }
+    public TModel Model { get; init; }
 }
 
 public interface IIndex

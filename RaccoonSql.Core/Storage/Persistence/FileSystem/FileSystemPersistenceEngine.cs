@@ -57,39 +57,6 @@ public class FileSystemPersistenceEngine(
         return shouldWrite;
     }
 
-    private IEnumerable<IndexChange> LoadIndexChanges(string path)
-    {
-        if (!fileSystem.File.Exists(path)) return Enumerable.Empty<IndexChange>();
-
-        var changes = new List<IndexChange>();
-
-        using (var stream = fileSystem.File.OpenRead(path))
-        {
-            while (true)
-            {
-                try
-                {
-                    unsafe
-                    {
-                        var changeSize = sizeof(IndexChange);
-                        var array = new byte[changeSize];
-                        var buffer = new Span<byte>(array);
-                        stream.ReadExactly(buffer);
-                        var change = MemoryPackSerializer.Deserialize<IndexChange>(buffer);
-                        changes.Add(change);
-                    }
-                }
-                catch (EndOfStreamException)
-                {
-                    break;
-                }
-            }
-        }
-
-        _fileManager.Delete(path);
-        return changes;
-    }
-
     public uint GetChunkCount(string setName)
     {
         var length = (uint)fileSystem.Directory.GetFiles(rootPath, $"{setName}.*.chunk").Length;
@@ -245,7 +212,7 @@ public class FileManager(IFileSystem fileSystem)
         if (_streams.Remove(path, out var stream))
         {
             stream.Dispose();
-            fileSystem.File.Delete(path);
         }
+        fileSystem.File.Delete(path);
     }
 }

@@ -52,4 +52,11 @@ internal class StorageEngine(
         var collection = GetCollectionByName<TModel>(storageInfo.CollectionName);
         collection.Delete(storageInfo.ChunkInfo.Value);
     }
+
+    public IEnumerable<TModel> All<TModel>(string collectionName)
+        where TModel : IModel
+    {
+        var collection = GetCollectionByName<TModel>(collectionName);
+        return collection.GetAllRows().Select(row => row.Model);
+    }
 }

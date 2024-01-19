@@ -44,6 +44,11 @@ public class ModelSet<TData>
         return _storageEngine.Read<TData>(storageInfo);
     }
 
+    public IEnumerable<TData> All()
+    {
+        return _storageEngine.All<TData>(SetName);
+    }
+
     public void Update(TData data, ConflictBehavior? conflictBehavior = null)
     {
         var storageInfo = _storageEngine.GetStorageInfo<TData>(SetName, data.Id);
