@@ -81,10 +81,10 @@ public class BPlusTree<TKey, TValue>(int t)
         } while (leaf != null);
     }
 
-    public override string ToString()
+    /*public override string ToString()
     {
         return _root.ToString();
-    }
+    }*/
 }
 
 internal class BPlusTreeNode<TKey, TValue>(int t)
@@ -101,6 +101,7 @@ internal class BPlusTreeNode<TKey, TValue>(int t)
     public BPlusTreeNode<TKey, TValue>? PreviousLeaf { get; set; }
 
 
+    /*
     public override string ToString()
     {
         StringBuilder builder = new();
@@ -127,6 +128,7 @@ internal class BPlusTreeNode<TKey, TValue>(int t)
         builder.Append(')');
         return builder.ToString();
     }
+    */
 
     public BPlusTreeNode<TKey, TValue>? Insert(TKey key, TValue value)
     {
@@ -179,6 +181,8 @@ internal class BPlusTreeNode<TKey, TValue>(int t)
         rightNode.NextLeaf = NextLeaf;
         leftNode.NextLeaf = rightNode;
         rightNode.PreviousLeaf = leftNode;
+        if (PreviousLeaf != null) PreviousLeaf.NextLeaf = leftNode;
+        if (NextLeaf != null) NextLeaf.PreviousLeaf = rightNode;
 
         var splitPos = Keys.Count / 2;
 
