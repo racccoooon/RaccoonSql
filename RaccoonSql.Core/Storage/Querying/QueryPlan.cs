@@ -2,7 +2,7 @@ using System.Linq.Expressions;
 
 namespace RaccoonSql.Core.Storage.Querying;
 
-public interface IQueryPlanNode<TModel> where TModel : IModel
+public interface IQueryPlanNode<TModel> where TModel : ModelBase
 {
     internal IEnumerable<Row<TModel>> Execute(ModelCollection<TModel> collection, IQueryPlanParameterSource parameters);
 }
@@ -67,7 +67,7 @@ public readonly struct ConstantQueryPlanParameter<T>(T value) : IQueryPlanParame
     }
 }
 
-public class QueryPlanSortComparer<TModel, T> : IComparer<Row<TModel>> where T : IComparable<T> where TModel : IModel
+public class QueryPlanSortComparer<TModel, T> : IComparer<Row<TModel>> where T : IComparable<T> where TModel : ModelBase
 {
     private readonly Func<TModel, T> _accessor;
 
@@ -84,7 +84,7 @@ public class QueryPlanSortComparer<TModel, T> : IComparer<Row<TModel>> where T :
     }
 }
 
-public class QueryPlanMergeSorted<TModel> : IQueryPlanNode<TModel> where TModel : IModel
+public class QueryPlanMergeSorted<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
 {
     public required IReadOnlyList<IQueryPlanNode<TModel>> Children { get; init; }
     public required IComparer<Row<TModel>> Comparer { get; init; }
@@ -183,7 +183,7 @@ public class QueryPlanMergeSorted<TModel> : IQueryPlanNode<TModel> where TModel 
     }
 }
 
-public class QueryPlanMergeUnsorted<TModel> : IQueryPlanNode<TModel> where TModel : IModel
+public class QueryPlanMergeUnsorted<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
 {
     public required IReadOnlyList<IQueryPlanNode<TModel>> Children { get; init; }
 
@@ -232,7 +232,7 @@ public class ParameterizedPredicate<T>(
     }
 }
 
-public class QueryPlanPredicateFilter<TModel> : IQueryPlanNode<TModel> where TModel : IModel
+public class QueryPlanPredicateFilter<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
 {
     public required ParameterizedPredicate<TModel> Predicate { get; init; }
     public required IQueryPlanNode<TModel> Child { get; init; }
@@ -252,7 +252,7 @@ public class QueryPlanPredicateFilter<TModel> : IQueryPlanNode<TModel> where TMo
     }
 }
 
-public class QueryPlanLimit<TModel> : IQueryPlanNode<TModel> where TModel : IModel
+public class QueryPlanLimit<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
 {
     public required IQueryPlanParameter<int> Skip { get; init; }
     public required IQueryPlanParameter<int>? Take { get; init; }
@@ -288,7 +288,7 @@ public class QueryPlanLimit<TModel> : IQueryPlanNode<TModel> where TModel : IMod
     }
 }
 
-public class QueryPlanIndexScan<TModel> : IQueryPlanNode<TModel> where TModel : IModel
+public class QueryPlanIndexScan<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
 {
     public required string Name { get; init; }
     public required bool Descending { get; init; }
@@ -500,7 +500,7 @@ public readonly struct ScanRange : IComparable<ScanRange>
     }
 }
 
-public class QueryPlanSort<TModel> : IQueryPlanNode<TModel> where TModel : IModel
+public class QueryPlanSort<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
 {
     public required IComparer<Row<TModel>> Comparer { get; init; }
     public required IQueryPlanNode<TModel> Child { get; init; }
@@ -514,7 +514,7 @@ public class QueryPlanSort<TModel> : IQueryPlanNode<TModel> where TModel : IMode
     }
 }
 
-public class QueryPlanFullScan<TModel> : IQueryPlanNode<TModel> where TModel : IModel
+public class QueryPlanFullScan<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
 {
     IEnumerable<Row<TModel>> IQueryPlanNode<TModel>.Execute(ModelCollection<TModel> collection,
         IQueryPlanParameterSource parameters)
@@ -523,7 +523,7 @@ public class QueryPlanFullScan<TModel> : IQueryPlanNode<TModel> where TModel : I
     }
 }
 
-public class QueryPlan<TModel> where TModel : IModel
+public class QueryPlan<TModel> where TModel : ModelBase
 {
     public required IQueryPlanNode<TModel> Root { get; init; }
 

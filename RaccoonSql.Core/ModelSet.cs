@@ -1,10 +1,13 @@
-using System.Linq.Expressions;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
+using Castle.DynamicProxy;
 using RaccoonSql.Core.Storage;
 
 namespace RaccoonSql.Core;
 
 public class ModelSet<TModel>
-    where TModel : IModel
+    where TModel : ModelBase
 {
     private readonly ModelStoreOptions _modelStoreOptions;
 
@@ -17,12 +20,20 @@ public class ModelSet<TModel>
         _modelStoreOptions = modelStoreOptions;
     }
     
-    public void Insert(TModel data, ConflictBehavior? conflictBehavior = null)
+    public void Insert(TModel model, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _modelCollection.GetStorageInfo(data.Id);
-        if ((conflictBehavior ?? _modelStoreOptions.DefaultInsertConflictBehavior).ShouldThrow(storageInfo.Exists))
-            throw new DuplicateIdException(typeof(TModel), data.Id);
-        _modelCollection.Write(data, storageInfo.ChunkInfo);
+        conflictBehavior ??= _modelStoreOptions.DefaultInsertConflictBehavior;
+        if (!_modelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
+            return;
+        
+        var cloned = (TModel) RuntimeHelpers.GetUninitializedObject(typeof(TModel));
+        AutoMapper.Map(model, cloned);
+        
+        var storageInfo = _modelCollection.GetStorageInfo(cloned.Id);
+        if (conflictBehavior.Value.ShouldThrow(storageInfo.Exists))
+            throw new DuplicateIdException(typeof(TModel), cloned.Id);
+        
+        _modelCollection.Write(cloned, storageInfo.ChunkInfo);
     }
 
     public bool Exists(Guid id)
@@ -38,26 +49,54 @@ public class ModelSet<TModel>
             throw new IdNotFoundException(typeof(TModel), id);
         return !storageInfo.ChunkInfo.HasValue 
             ? default 
-            : _modelCollection.Read(storageInfo.ChunkInfo!.Value);
+            : ModelProxyFactory.GenerateProxy(_modelCollection.Read(storageInfo.ChunkInfo!.Value));
     }
 
     public IEnumerable<TModel> All()
     {
-        return _modelCollection.GetAllRows().Select(x => x.Model);
+        return _modelCollection.GetAllRows().Select(x => ModelProxyFactory.GenerateProxy(x.Model));
     }
 
-    public void Update(TModel data, ConflictBehavior? conflictBehavior = null)
+    public void Update(TModel model, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _modelCollection.GetStorageInfo(data.Id);
-        if ((conflictBehavior ?? _modelStoreOptions.DefaultUpdateConflictBehavior).ShouldThrow(!storageInfo.Exists))
-            throw new IdNotFoundException(typeof(TModel), data.Id);
-        _modelCollection.Write(data, storageInfo.ChunkInfo);
+        var storageInfo = _modelCollection.GetStorageInfo(model.Id);
+        conflictBehavior ??= _modelStoreOptions.DefaultUpdateConflictBehavior;
+        if (conflictBehavior.Value.ShouldThrow(!storageInfo.Exists))
+            throw new IdNotFoundException(typeof(TModel), model.Id);
+
+        if (!storageInfo.ChunkInfo.HasValue) 
+            return;
+
+        if (!_modelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
+            return;
+
+        var writeModel = _modelCollection.Read(storageInfo.ChunkInfo.Value);
+        AutoMapper.ApplyChanges(writeModel, model.Changes);
+
+        _modelCollection.Write(writeModel, storageInfo.ChunkInfo);
     }
 
-    public void Upsert(TModel data)
+    public void Upsert(TModel model, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _modelCollection.GetStorageInfo(data.Id);
-        _modelCollection.Write(data, storageInfo.ChunkInfo);
+        conflictBehavior ??= _modelStoreOptions.DefaultUpsertConflictBehavior;
+        if (!_modelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
+            return;
+
+        var storageInfo = _modelCollection.GetStorageInfo(model.Id);
+
+        TModel writeModel;
+        if (storageInfo.ChunkInfo.HasValue)
+        {
+            writeModel = _modelCollection.Read(storageInfo.ChunkInfo.Value);
+            AutoMapper.ApplyChanges(writeModel, model.Changes);
+        }
+        else
+        {
+            writeModel = (TModel) RuntimeHelpers.GetUninitializedObject(typeof(TModel));
+            AutoMapper.Map(model, writeModel);
+        }
+        
+        _modelCollection.Write(writeModel, storageInfo.ChunkInfo);
     }
 
     public void Remove(Guid id, ConflictBehavior? conflictBehavior = null)

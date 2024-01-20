@@ -4,10 +4,8 @@ using RaccoonSql.Core;
 namespace RaccoonSql.Demo.Models;
 
 [MemoryPackable]
-public partial record PersonModel : IModel
+public partial class PersonModel : ModelBase
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
-    
     [Index(IndexType.BTree)]
     public virtual required DateOnly Birthday { get; set; }
     

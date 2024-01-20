@@ -64,7 +64,7 @@ public class FileSystemPersistenceEngine(
     }
 
     public ModelCollectionChunk<TModel> LoadChunk<TModel>(string setName, uint chunkId, Type type)
-        where TModel : IModel
+        where TModel : ModelBase
     {
         var path = GetChunkName(setName, chunkId);
 
@@ -129,7 +129,7 @@ public class FileSystemPersistenceEngine(
                 {
                     Add = changeModel.Add,
                     Offset = changeModel.Offset,
-                    Model = (IModel) serializationEngine.Deserialize(ms, type),
+                    ModelBase = (ModelBase) serializationEngine.Deserialize(ms, type),
                 };
                 changes.Add(change);
             }
@@ -140,7 +140,7 @@ public class FileSystemPersistenceEngine(
     }
 
     public void WriteChunk<TModel>(string setName, uint chunkId, ModelCollectionChunk<TModel> chunk, ChunkChange change)
-        where TModel : IModel
+        where TModel : ModelBase
     {
         var path = GetChunkName(setName, chunkId);
         var changeFile = GetChunkLogName(setName, chunkId);
@@ -155,7 +155,7 @@ public class FileSystemPersistenceEngine(
     }
 
     private void WriteChunkInternal<TModel>(string path, string changeFile, ModelCollectionChunk<TModel> chunk)
-        where TModel : IModel
+        where TModel : ModelBase
     {
         using var chunkFileStream = fileSystem.File.Open(path, FileMode.Create);
         serializationEngine.Serialize(chunkFileStream, chunk, chunk.GetType());
@@ -168,7 +168,7 @@ public class FileSystemPersistenceEngine(
         var stream = _fileManager.GetAppend(path);
         
         using var ms = new MemoryStream();
-        serializationEngine.Serialize(ms, chunkChange.Model, chunkChange.Model.GetType());
+        serializationEngine.Serialize(ms, chunkChange.ModelBase, chunkChange.ModelBase.GetType());
 
         var changeModel = new ChunkChangeModel
         {

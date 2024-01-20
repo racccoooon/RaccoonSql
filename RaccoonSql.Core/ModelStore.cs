@@ -16,7 +16,7 @@ public class ModelStore(
     
     private readonly Dictionary<string, object> _modelSets = new();
 
-    public ModelSet<TModel> Set<TModel>(string? setName = null) where TModel : IModel
+    public ModelSet<TModel> Set<TModel>(string? setName = null) where TModel : ModelBase
     {
         var name = typeof(TModel).FullName! + "$" + (setName ?? "");
         

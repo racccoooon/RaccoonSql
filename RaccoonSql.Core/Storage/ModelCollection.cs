@@ -9,7 +9,7 @@ using RaccoonSql.Demo.Models;
 namespace RaccoonSql.Core.Storage;
 
 public class ModelCollection<TModel>
-    where TModel : IModel
+    where TModel : ModelBase
 {
     private const int ModelsPerChunk = 512;
     private const int RehashThreshold = 66;
@@ -63,7 +63,7 @@ public class ModelCollection<TModel>
                              .Select(a => a.CreateConstraint(modelType, prop.PropertyType))
                              .ToList()
                      })
-                     .ToDictionary(x => x.Prop.Name, x => x.Attributes);
+                     .ToDictionary(x => x.Prop.SetMethod!.Name, x => x.Attributes);
             
 
         foreach (var x in modelType.GetProperties()
@@ -195,6 +195,31 @@ public class ModelCollection<TModel>
                 ChunkInfo = chunkInfo,
             };
         }
+    }
+
+    public bool ExecuteChecksConstraints(TModel model, bool throwOnFailure)
+    {
+        foreach (var (key, value) in model.Changes)
+        {
+            if (!_checkConstraints.TryGetValue(key, out var constraints))
+                continue;
+
+            foreach (var checkConstraint in constraints)
+            {
+                if (!checkConstraint.Check(model, value))
+                {
+                    if (throwOnFailure)
+                    {
+                        throw new Exception(
+                            $"Check {checkConstraint.GetType().Name} failed for {key} with value {value} on id {model.Id}.");
+                    }
+
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     public void Write(TModel model, ChunkInfo? chunkInfo)
@@ -332,7 +357,7 @@ public class ModelCollection<TModel>
     }
 }
 
-public readonly struct Row<TModel> where TModel : IModel
+public readonly struct Row<TModel> where TModel : ModelBase
 {
     public ChunkInfo ChunkInfo { get; init; }
     public TModel Model { get; init; }
@@ -340,43 +365,43 @@ public readonly struct Row<TModel> where TModel : IModel
 
 public interface IIndex
 {
-    public IEnumerable<IModel> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive, bool toInclusive, bool backwards);
-    void Insert(IModel model);
-    void Update(IModel oldModel, IModel model);
-    void Remove(IModel model);
+    public IEnumerable<ModelBase> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive, bool toInclusive, bool backwards);
+    void Insert(ModelBase model);
+    void Update(ModelBase oldModelBase, ModelBase model);
+    void Remove(ModelBase model);
 }
 
 public class BTreeIndex<T> : IIndex
     where T : IComparable<T>, IEquatable<T>
 {
-    private readonly Func<IModel, T> _func;
-    private readonly BPlusTree<T, IModel> _tree;
+    private readonly Func<ModelBase, T> _func;
+    private readonly BPlusTree<T, ModelBase> _tree;
 
-    public BTreeIndex(Func<IModel, T> func, int t)
+    public BTreeIndex(Func<ModelBase, T> func, int t)
     {
         _func = func;
-        _tree = new BPlusTree<T, IModel>(t);
+        _tree = new BPlusTree<T, ModelBase>(t);
     }
 
-    public IEnumerable<IModel> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive, bool toInclusive, bool backwards)
+    public IEnumerable<ModelBase> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive, bool toInclusive, bool backwards)
     {
         return _tree.FunkyRange((T)from ?? default, (T)to ?? default, fromSet, toSet, !fromInclusive, !toInclusive, backwards);
     }
 
-    public void Insert(IModel model)
+    public void Insert(ModelBase model)
     {
         _tree.Insert(_func(model), model);
     }
 
-    public void Update(IModel oldModel, IModel model)
+    public void Update(ModelBase oldModelBase, ModelBase model)
     {
-        if (_func(oldModel).Equals(_func(model))) return;
+        if (_func(oldModelBase).Equals(_func(model))) return;
         
-        Remove(oldModel);
+        Remove(oldModelBase);
         Insert(model);
     }
 
-    public void Remove(IModel model)
+    public void Remove(ModelBase model)
     {
         _tree.Remove(_func(model), model);
     }

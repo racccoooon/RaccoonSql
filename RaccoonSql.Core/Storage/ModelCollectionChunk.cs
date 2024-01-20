@@ -7,7 +7,7 @@ namespace RaccoonSql.Core.Storage;
 
 [MemoryPackable]
 public partial class ModelCollectionChunk<TModel>
-    where TModel : IModel
+    where TModel : ModelBase
 {
     public List<TModel> Models { get; set; } = new();
 
@@ -41,7 +41,7 @@ public partial class ModelCollectionChunk<TModel>
 
         return new ChunkChange
         {
-            Model = model,
+            ModelBase = model,
             Add = add,
             Offset = offset,
         };
@@ -74,13 +74,13 @@ public partial class ModelCollectionChunk<TModel>
     {
         if (change.Add)
         {
-            ModelOffset[change.Model.Id] = (uint)Models.Count;
-            Models.Add((TModel)change.Model);
+            ModelOffset[change.ModelBase.Id] = (uint)Models.Count;
+            Models.Add((TModel)change.ModelBase);
         }
         else
         {
-            Models[(int)change.Offset] = (TModel)change.Model;
-            ModelOffset[change.Model.Id] = change.Offset;
+            Models[(int)change.Offset] = (TModel)change.ModelBase;
+            ModelOffset[change.ModelBase.Id] = change.Offset;
         }
         
     }

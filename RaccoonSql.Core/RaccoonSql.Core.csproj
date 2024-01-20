@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="Castle.Core" Version="5.1.1" />
       <PackageReference Include="JetBrains.Annotations" Version="2023.3.0" />
       <PackageReference Include="MemoryPack" Version="1.10.0" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

@@ -5,16 +5,14 @@ namespace RaccoonSql.Demo.Models;
 
 [MemoryPackable]
 [Trigger(typeof(CarModelTrigger))]
-public partial class CarModel : IModel
+public partial class CarModel : ModelBase
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
-    
     [TypedCheckConstraint(typeof(CarModelNameConstraint))]
     [LengthCheckConstraint(50)]
     public virtual string Name { get; set; }
     
-    [ForeignKeyConstraint(typeof(PersonModel))]
-    public virtual int OwnerId { get; set; }
+    //[ForeignKeyConstraint(typeof(PersonModel))]
+    public virtual Guid OwnerId { get; set; }
 }
 
 public class CarModelNameConstraint : ICheckConstraint<CarModel, string>

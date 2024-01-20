@@ -1,11 +1,11 @@
 namespace RaccoonSql.Core;
 
-[AttributeUsage(AttributeTargets.Property)]
-public class ForeignKeyConstraintAttribute(Type refType, string? setName = null) : Attribute
-{
-    public Type RefType { get; } = refType;
-    public string? SetName { get; } = setName;
-}
+// [AttributeUsage(AttributeTargets.Property)]
+// public class ForeignKeyConstraintAttribute(Type refType, string? setName = null) : Attribute
+// {
+//     public Type RefType { get; } = refType;
+//     public string? SetName { get; } = setName;
+// }
 
 [AttributeUsage(AttributeTargets.Property)]
 public abstract class CheckConstraintAttribute : Attribute
@@ -28,9 +28,9 @@ public class LengthCheckConstraintAttribute(int maxLength) : CheckConstraintAttr
     }
 }
 
-public class LengthCheckConstraint(int? minLength, int maxLength) : ICheckConstraint<IModel, string>
+public class LengthCheckConstraint(int? minLength, int maxLength) : ICheckConstraint<ModelBase, string>
 {
-    public bool Check(IModel model, string value)
+    public bool Check(ModelBase model, string value)
     {
         var length = value.Length;
         return length >= minLength && length <= maxLength;
@@ -60,14 +60,14 @@ public class TypedCheckConstraintAttribute : CheckConstraintAttribute
 
 public interface ICheckConstraint
 {
-    bool Check(IModel model, object value);
+    bool Check(ModelBase model, object? value);
 }
 
 public interface ICheckConstraint<in TModel, in TValue> : ICheckConstraint
-    where TModel : IModel
+    where TModel : ModelBase
 {
-    bool Check(TModel model, TValue value);
-    bool ICheckConstraint.Check(IModel model, object value) => Check((TModel)model, (TValue)value);
+    bool Check(TModel model, TValue? value);
+    bool ICheckConstraint.Check(ModelBase model, object? value) => Check((TModel)model, (TValue?)value);
 }
 
 [AttributeUsage(AttributeTargets.Class)]
@@ -78,36 +78,36 @@ public class TriggerAttribute(Type implType) : Attribute
 
 public interface ICreateTrigger
 {
-    void OnCreate(IModel model);
+    void OnCreate(ModelBase model);
 }
 
 public interface ICreateTrigger<in TModel> : ICreateTrigger
-    where TModel : IModel
+    where TModel : ModelBase
 {
     void OnCreate(TModel model);
-    void ICreateTrigger.OnCreate(IModel model) => OnCreate((TModel)model);
+    void ICreateTrigger.OnCreate(ModelBase model) => OnCreate((TModel)model);
 }
 
 public interface IUpdateTrigger
 {
-    void OnUpdate(IModel model, Dictionary<string, object?> changes);
+    void OnUpdate(ModelBase model, Dictionary<string, object?> changes);
 }
 
 public interface IUpdateTrigger<in TModel> : IUpdateTrigger
-    where TModel : IModel
+    where TModel : ModelBase
 {
     void OnUpdate(TModel model, Dictionary<string, object?> changes);
-    void IUpdateTrigger.OnUpdate(IModel model, Dictionary<string, object?> changes) => OnUpdate((TModel)model, changes);
+    void IUpdateTrigger.OnUpdate(ModelBase model, Dictionary<string, object?> changes) => OnUpdate((TModel)model, changes);
 }
 
 public interface IDeleteTrigger
 {
-    void OnDelete(IModel model);
+    void OnDelete(ModelBase model);
 }
 
 public interface IDeleteTrigger<in TModel> : IDeleteTrigger
-    where TModel : IModel
+    where TModel : ModelBase
 {
     void OnDelete(TModel model);
-    void IDeleteTrigger.OnDelete(IModel model) => OnDelete((TModel)model);
+    void IDeleteTrigger.OnDelete(ModelBase model) => OnDelete((TModel)model);
 }
