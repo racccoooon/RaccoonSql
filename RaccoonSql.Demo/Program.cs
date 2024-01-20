@@ -54,14 +54,18 @@ void range<T>(BPlusTree<T, Guid> index, T from, T to) where T : IComparable<T>, 
 }
 
 
-// select * from persons where height > 180 or "20.1.2002" < birthday < "12.12.2012"::date order by address.city 
+// select * from persons where height > 180 or "20.1.2002" < birthday < "12.12.2012"::date order by address.city
+var parameters = new QueryPlanParameterBag([10, 10], new Dictionary<string, object>
+{
+    { "height", 180 }
+});
 var sortComparer = new QueryPlanSortComparer<PersonModel, string>(x => x.Address.City);
 var queryPlan = new QueryPlan<PersonModel>
 {
     Root = new QueryPlanLimit<PersonModel>
     {
-        Skip = 10,
-        Take = 10,
+        Skip = new PositionalQueryPlanParameter<int>(0),
+        Take = new PositionalQueryPlanParameter<int>(1),
         Child = new QueryPlanMergeSorted<PersonModel>
         {
             Children = [
@@ -71,15 +75,18 @@ var queryPlan = new QueryPlan<PersonModel>
                     {
                         Descending = false,
                         Name = "btree:Height",
-                        Ranges = [new ScanRange
+                        Ranges = new ScanRanges
                         {
-                            Start = 180,
-                            End = 0,
-                            StartSet = true,
-                            EndSet = false,
-                            StartInclusive = false,
-                            EndInclusive = false,
-                        }]
+                            Ranges = [new ParameterizedScanRange
+                                {
+                                    Start = new NamedQueryPlanParameter<IComparable>("height"),
+                                    End = new ConstantQueryPlanParameter<IComparable>(0),
+                                    StartSet = true,
+                                    EndSet = false,
+                                    StartInclusive = false,
+                                    EndInclusive = false,
+                                }],
+                        },
                     },
                     Comparer = sortComparer,
                 },
@@ -89,15 +96,18 @@ var queryPlan = new QueryPlan<PersonModel>
                     {
                         Descending = false,
                         Name = "btree:Birthday",
-                        Ranges = [new ScanRange
+                        Ranges = new ScanRanges
                         {
-                            Start = DateOnly.Parse("1-20-2002"),
-                            End = DateOnly.Parse("12-12-2012"),
-                            StartSet = true,
-                            EndSet = true,
-                            StartInclusive = false,
-                            EndInclusive = false,
-                        }]
+                            Ranges = [new ParameterizedScanRange
+                            {
+                                Start = new ConstantQueryPlanParameter<IComparable>(DateOnly.Parse("1-20-2002")),
+                                End = new ConstantQueryPlanParameter<IComparable>(DateOnly.Parse("12-12-2012")),
+                                StartSet = true,
+                                EndSet = true,
+                                StartInclusive = false,
+                                EndInclusive = false,
+                            }],
+                        },
                     },
                     Comparer = sortComparer,
                 }
@@ -112,7 +122,7 @@ var stopwatch = Stopwatch.StartNew();
 List<Row<PersonModel>> list = [];
 for (int i = 0; i < 100; i++)
 {
-    list = queryPlan.Execute(persons).ToList();
+    list = queryPlan.Execute(persons, parameters).ToList();
 }
 
 stopwatch.Stop();
