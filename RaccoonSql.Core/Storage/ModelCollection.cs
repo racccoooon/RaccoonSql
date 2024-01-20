@@ -15,11 +15,21 @@ public class ModelCollection<TModel>
     private const int RehashThreshold = 66;
 
     private readonly string _name;
+    
     private readonly IPersistenceEngine _persistenceEngine;
+    
     private ModelCollectionChunk<TModel>[] _chunks;
+    
     private uint _modelCount;
+    
     private Dictionary<string, IIndex> _bTreeIndices = [];
     private Dictionary<string, IIndex> _hashIndices = [];
+
+    private readonly List<ICreateTrigger<TModel>> _createTriggers = new();
+    private readonly List<IUpdateTrigger<TModel>> _updateTriggers = new();
+    private readonly List<IDeleteTrigger<TModel>> _deleteTriggers = new();
+
+    private readonly Dictionary<string, List<ICheckConstraint>> _checkConstraints;
 
     private IEnumerable<IIndex> AllIndices => _bTreeIndices.Values.Concat(_hashIndices.Values);
 
@@ -28,7 +38,35 @@ public class ModelCollection<TModel>
         _name = name;
         _persistenceEngine = persistenceEngine;
 
-        foreach (var x in typeof(TModel).GetProperties()
+        var modelType = typeof(TModel);
+        
+        foreach (var triggerAttribute in modelType.GetCustomAttributes<TriggerAttribute>())
+        {
+            var triggerType = triggerAttribute.ImplType;
+            var trigger = Activator.CreateInstance(triggerType);
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
+            if(trigger is ICreateTrigger<TModel> createTrigger)
+                _createTriggers.Add(createTrigger);
+            if(trigger is IUpdateTrigger<TModel> updateTrigger)
+                _updateTriggers.Add(updateTrigger);
+            if(trigger is IDeleteTrigger<TModel> deleteTrigger)
+                _deleteTriggers.Add(deleteTrigger);
+        }
+        
+        _checkConstraints = modelType.GetProperties()
+                     .Select(prop => new
+                     {
+                         Prop = prop, 
+                         Attributes = prop.GetCustomAttributes()
+                             .Where(a => a.GetType().IsAssignableTo(typeof(CheckConstraintAttribute)))
+                             .Cast<CheckConstraintAttribute>()
+                             .Select(a => a.CreateConstraint(modelType, prop.PropertyType))
+                             .ToList()
+                     })
+                     .ToDictionary(x => x.Prop.Name, x => x.Attributes);
+            
+
+        foreach (var x in modelType.GetProperties()
                      .Select(prop => new { Prop = prop, Attribute = prop.GetCustomAttribute<IndexAttribute>() })
                      .Where(x => x.Attribute != null))
         {
@@ -55,7 +93,7 @@ public class ModelCollection<TModel>
         _chunks = new ModelCollectionChunk<TModel>[chunkCount];
         for (uint i = 0; i < _chunks.Length; i++)
         {
-            var chunk = persistenceEngine.LoadChunk<TModel>(name, i, typeof(TModel));
+            var chunk = persistenceEngine.LoadChunk<TModel>(name, i, modelType);
 
             foreach (var model in chunk.Models)
             {
@@ -163,6 +201,12 @@ public class ModelCollection<TModel>
     {
         if (chunkInfo is not null)
         {
+            foreach (var trigger in _updateTriggers)
+            {
+                //TODO: get the changes
+                trigger.OnUpdate(model, new Dictionary<string, object?>());
+            }
+            
             foreach (var index in AllIndices)
             {
                 index.Update(_chunks[chunkInfo.Value.ChunkId].GetModel(chunkInfo.Value.Offset), model);
@@ -170,6 +214,11 @@ public class ModelCollection<TModel>
         }
         else
         {
+            foreach (var trigger in _createTriggers)
+            {
+                trigger.OnCreate(model);
+            }
+            
             _modelCount++;
             RehashIfNeeded();
             chunkInfo = DetermineChunkForInsert(model.Id);
@@ -232,6 +281,12 @@ public class ModelCollection<TModel>
     {
         var chunk = _chunks[chunkInfo.ChunkId];
         var model = chunk.GetModel(chunkInfo.Offset);
+        
+        foreach (var trigger in _deleteTriggers)
+        {
+            trigger.OnDelete(model);
+        }
+        
         foreach (var index in AllIndices)
         {
             index.Remove(model);
