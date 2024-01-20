@@ -153,9 +153,9 @@ public class ModelCollection<TModel>
             throw new ArgumentException($"index for property {propertyInfo.Name} already exists");
         }
 
-        var func = expr.Compile();
+        var accessor = expr.Compile();
 
-        _bTreeIndices[propertyInfo.Name] = new BTreeIndex<T>(x => func((TModel)x), 100); // TODO btree t size
+        _bTreeIndices[propertyInfo.Name] = new BTreeIndex<T>(x => accessor((TModel)x), 100); // TODO btree t size
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -374,12 +374,12 @@ public interface IIndex
 public class BTreeIndex<T> : IIndex
     where T : IComparable<T>, IEquatable<T>
 {
-    private readonly Func<ModelBase, T> _func;
+    private readonly Func<ModelBase, T> _accessor;
     private readonly BPlusTree<T, ModelBase> _tree;
 
-    public BTreeIndex(Func<ModelBase, T> func, int t)
+    public BTreeIndex(Func<ModelBase, T> accessor, int t)
     {
-        _func = func;
+        _accessor = accessor;
         _tree = new BPlusTree<T, ModelBase>(t);
     }
 
@@ -390,12 +390,12 @@ public class BTreeIndex<T> : IIndex
 
     public void Insert(ModelBase model)
     {
-        _tree.Insert(_func(model), model);
+        _tree.Insert(_accessor(model), model);
     }
 
     public void Update(ModelBase oldModelBase, ModelBase model)
     {
-        if (_func(oldModelBase).Equals(_func(model))) return;
+        if (_accessor(oldModelBase).Equals(_accessor(model))) return;
         
         Remove(oldModelBase);
         Insert(model);
@@ -403,6 +403,6 @@ public class BTreeIndex<T> : IIndex
 
     public void Remove(ModelBase model)
     {
-        _tree.Remove(_func(model), model);
+        _tree.Remove(_accessor(model), model);
     }
 }

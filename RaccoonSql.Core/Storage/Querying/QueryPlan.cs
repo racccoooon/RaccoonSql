@@ -526,8 +526,7 @@ public class QueryPlanFullScan<TModel> : IQueryPlanNode<TModel> where TModel : M
 public class QueryPlan<TModel> where TModel : ModelBase
 {
     public required IQueryPlanNode<TModel> Root { get; init; }
-
-
+    
     public IEnumerable<Row<TModel>> Execute(ModelSet<TModel> collection, IQueryPlanParameterSource parameters)
     {
         return Root.Execute(collection._modelCollection, parameters);
