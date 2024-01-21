@@ -14,7 +14,7 @@ internal static class ModelProxyFactory
 
         AutoMapper.Map(source, model);
         
-        model.Changes = new Dictionary<string, object>();
+        model.Changes = new Dictionary<string, object?>();
         model.TrackChanges = true;
 
         return model;
@@ -44,4 +44,4 @@ public class PropertyInterceptor : IInterceptor
     }
 }
 
-internal interface IModelProxy;
+public interface IModelProxy;

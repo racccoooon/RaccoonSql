@@ -7,14 +7,38 @@ using RaccoonSql.Demo.Models;
 
 var modelStoreOptions = new ModelStoreOptions
 {
-    DefaultInsertConflictBehavior = ConflictBehavior.Ignore,
-    DefaultRemoveConflictBehavior = ConflictBehavior.Ignore,
-    DefaultUpdateConflictBehavior = ConflictBehavior.Ignore,
-    FindDefaultConflictBehavior = ConflictBehavior.Ignore,
+    DefaultInsertConflictBehavior = ConflictBehavior.Throw,
+    DefaultRemoveConflictBehavior = ConflictBehavior.Throw,
+    DefaultUpdateConflictBehavior = ConflictBehavior.Throw,
+    DefaultUpsertConflictBehavior = ConflictBehavior.Throw,
+    FindDefaultConflictBehavior = ConflictBehavior.Throw,
     Root = "TestDB",
 };
 var modelStore = new ModelStore(modelStoreOptions);
 
+var cars = modelStore.Set<CarModel>();
+
+var car1 = new CarModel
+{
+    Name = "New Car",
+    OwnerId = default,
+};
+cars.Insert(car1);
+
+var found = cars.Find(car1.Id)!;
+found.Name = "Super mega long name that is way too long or the check constraint >~<";
+try
+{
+    cars.Update(found);
+}
+catch (Exception)
+{
+    Console.WriteLine("oopsie");
+}
+
+cars.Remove(car1.Id);
+
+return;
 var persons = modelStore.Set<PersonModel>();
 /*
 var addressFaker = new Faker<Address>()

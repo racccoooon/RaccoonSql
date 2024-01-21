@@ -54,7 +54,12 @@ public class TypedCheckConstraintAttribute : CheckConstraintAttribute
     //TODO: add support for injection/IServiceProvider
     public override ICheckConstraint CreateConstraint(Type modelType, Type propertyType)
     {
-        return (ICheckConstraint)Activator.CreateInstance(_implType.MakeGenericType(propertyType))!;
+        var type = _implType;
+        
+        if (_implType.IsGenericType)
+            type = _implType.MakeGenericType(propertyType);
+        
+        return (ICheckConstraint)Activator.CreateInstance(type)!;
     }
 }
 

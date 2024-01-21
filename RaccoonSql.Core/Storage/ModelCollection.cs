@@ -15,13 +15,13 @@ public class ModelCollection<TModel>
     private const int RehashThreshold = 66;
 
     private readonly string _name;
-    
+
     private readonly IPersistenceEngine _persistenceEngine;
-    
+
     private ModelCollectionChunk<TModel>[] _chunks;
-    
+
     private uint _modelCount;
-    
+
     private Dictionary<string, IIndex> _bTreeIndices = [];
     private Dictionary<string, IIndex> _hashIndices = [];
 
@@ -39,32 +39,32 @@ public class ModelCollection<TModel>
         _persistenceEngine = persistenceEngine;
 
         var modelType = typeof(TModel);
-        
+
         foreach (var triggerAttribute in modelType.GetCustomAttributes<TriggerAttribute>())
         {
             var triggerType = triggerAttribute.ImplType;
             var trigger = Activator.CreateInstance(triggerType);
             // ReSharper disable once ConvertIfStatementToSwitchStatement
-            if(trigger is ICreateTrigger<TModel> createTrigger)
+            if (trigger is ICreateTrigger<TModel> createTrigger)
                 _createTriggers.Add(createTrigger);
-            if(trigger is IUpdateTrigger<TModel> updateTrigger)
+            if (trigger is IUpdateTrigger<TModel> updateTrigger)
                 _updateTriggers.Add(updateTrigger);
-            if(trigger is IDeleteTrigger<TModel> deleteTrigger)
+            if (trigger is IDeleteTrigger<TModel> deleteTrigger)
                 _deleteTriggers.Add(deleteTrigger);
         }
-        
+
         _checkConstraints = modelType.GetProperties()
-                     .Select(prop => new
-                     {
-                         Prop = prop, 
-                         Attributes = prop.GetCustomAttributes()
-                             .Where(a => a.GetType().IsAssignableTo(typeof(CheckConstraintAttribute)))
-                             .Cast<CheckConstraintAttribute>()
-                             .Select(a => a.CreateConstraint(modelType, prop.PropertyType))
-                             .ToList()
-                     })
-                     .ToDictionary(x => x.Prop.SetMethod!.Name, x => x.Attributes);
-            
+            .Select(prop => new
+            {
+                Prop = prop,
+                Attributes = prop.GetCustomAttributes()
+                    .Where(a => a.GetType().IsAssignableTo(typeof(CheckConstraintAttribute)))
+                    .Cast<CheckConstraintAttribute>()
+                    .Select(a => a.CreateConstraint(modelType, prop.PropertyType))
+                    .ToList()
+            })
+            .ToDictionary(x => x.Prop.SetMethod!.Name, x => x.Attributes);
+
 
         foreach (var x in modelType.GetProperties()
                      .Select(prop => new { Prop = prop, Attribute = prop.GetCustomAttribute<IndexAttribute>() })
@@ -199,7 +199,12 @@ public class ModelCollection<TModel>
 
     public bool ExecuteChecksConstraints(TModel model, bool throwOnFailure)
     {
-        foreach (var (key, value) in model.Changes)
+        IDictionary<string, object?> changes = model.Changes;
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+        if (changes is null)
+            changes = PocoToDictionary.ToDictionary(model);
+
+        foreach (var (key, value) in changes)
         {
             if (!_checkConstraints.TryGetValue(key, out var constraints))
                 continue;
@@ -211,7 +216,7 @@ public class ModelCollection<TModel>
                     if (throwOnFailure)
                     {
                         throw new Exception(
-                            $"Check {checkConstraint.GetType().Name} failed for {key} with value {value} on id {model.Id}.");
+                            $"Check {checkConstraint.GetType().Name} failed for {key} with value '{value}' on id {model.Id}.");
                     }
 
                     return false;
@@ -231,7 +236,7 @@ public class ModelCollection<TModel>
                 //TODO: get the changes
                 trigger.OnUpdate(model, new Dictionary<string, object?>());
             }
-            
+
             foreach (var index in AllIndices)
             {
                 index.Update(_chunks[chunkInfo.Value.ChunkId].GetModel(chunkInfo.Value.Offset), model);
@@ -243,7 +248,7 @@ public class ModelCollection<TModel>
             {
                 trigger.OnCreate(model);
             }
-            
+
             _modelCount++;
             RehashIfNeeded();
             chunkInfo = DetermineChunkForInsert(model.Id);
@@ -306,12 +311,12 @@ public class ModelCollection<TModel>
     {
         var chunk = _chunks[chunkInfo.ChunkId];
         var model = chunk.GetModel(chunkInfo.Offset);
-        
+
         foreach (var trigger in _deleteTriggers)
         {
             trigger.OnDelete(model);
         }
-        
+
         foreach (var index in AllIndices)
         {
             index.Remove(model);
@@ -349,10 +354,12 @@ public class ModelCollection<TModel>
         {
             return _bTreeIndices[name["btree:".Length..]];
         }
+
         if (name.StartsWith("hash:"))
         {
             return _hashIndices[name["btree:".Length..]];
         }
+
         throw new ArgumentOutOfRangeException(nameof(name), $"unsupported index type: {name}");
     }
 }
@@ -365,7 +372,9 @@ public readonly struct Row<TModel> where TModel : ModelBase
 
 public interface IIndex
 {
-    public IEnumerable<ModelBase> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive, bool toInclusive, bool backwards);
+    public IEnumerable<ModelBase> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive,
+        bool toInclusive, bool backwards);
+
     void Insert(ModelBase model);
     void Update(ModelBase oldModelBase, ModelBase model);
     void Remove(ModelBase model);
@@ -383,9 +392,11 @@ public class BTreeIndex<T> : IIndex
         _tree = new BPlusTree<T, ModelBase>(t);
     }
 
-    public IEnumerable<ModelBase> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive, bool toInclusive, bool backwards)
+    public IEnumerable<ModelBase> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive,
+        bool toInclusive, bool backwards)
     {
-        return _tree.FunkyRange((T)from ?? default, (T)to ?? default, fromSet, toSet, !fromInclusive, !toInclusive, backwards);
+        return _tree.FunkyRange((T)from ?? default, (T)to ?? default, fromSet, toSet, !fromInclusive, !toInclusive,
+            backwards);
     }
 
     public void Insert(ModelBase model)
@@ -396,7 +407,7 @@ public class BTreeIndex<T> : IIndex
     public void Update(ModelBase oldModelBase, ModelBase model)
     {
         if (_accessor(oldModelBase).Equals(_accessor(model))) return;
-        
+
         Remove(oldModelBase);
         Insert(model);
     }
