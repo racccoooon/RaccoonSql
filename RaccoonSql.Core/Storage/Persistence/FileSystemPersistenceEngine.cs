@@ -3,12 +3,12 @@ using System.Runtime.CompilerServices;
 using MemoryPack;
 using RaccoonSql.Core.Serialization;
 
-namespace RaccoonSql.Core.Storage.Persistence.FileSystem;
+namespace RaccoonSql.Core.Storage.Persistence;
 
 public class FileSystemPersistenceEngine(
     IFileSystem fileSystem,
     string rootPath,
-    ISerializationEngine serializationEngine) : IPersistenceEngine
+    ISerializationEngine serializationEngine)
 {
     private readonly FileManager _fileManager = new(fileSystem);
     private static readonly Dictionary<string, int> FileWrites = new();

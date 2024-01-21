@@ -16,7 +16,7 @@ public class ModelCollection<TModel>
 
     private readonly string _name;
 
-    private readonly IPersistenceEngine _persistenceEngine;
+    private readonly FileSystemPersistenceEngine _persistenceEngine;
 
     private ModelCollectionChunk<TModel>[] _chunks;
 
@@ -33,7 +33,7 @@ public class ModelCollection<TModel>
 
     private IEnumerable<IIndex> AllIndices => _bTreeIndices.Values.Concat(_hashIndices.Values);
 
-    public ModelCollection(string name, IPersistenceEngine persistenceEngine)
+    public ModelCollection(string name, FileSystemPersistenceEngine persistenceEngine)
     {
         _name = name;
         _persistenceEngine = persistenceEngine;

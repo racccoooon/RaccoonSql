@@ -1,7 +1,7 @@
 using System.IO.Abstractions;
 using RaccoonSql.Core.Serialization;
 
-namespace RaccoonSql.Core.Storage.Persistence.FileSystem;
+namespace RaccoonSql.Core.Storage.Persistence;
 
 public record FileSystemPersistenceOptions
 {

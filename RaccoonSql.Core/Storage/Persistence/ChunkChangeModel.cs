@@ -1,6 +1,6 @@
 using MemoryPack;
 
-namespace RaccoonSql.Core.Storage.Persistence.FileSystem;
+namespace RaccoonSql.Core.Storage.Persistence;
 
 [MemoryPackable]
 public partial struct ChunkChangeModel
