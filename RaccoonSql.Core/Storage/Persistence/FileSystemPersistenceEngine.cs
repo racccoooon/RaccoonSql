@@ -10,7 +10,7 @@ public class FileSystemPersistenceEngine(
     string rootPath,
     ISerializationEngine serializationEngine)
 {
-    private readonly FileManager _fileManager = new(fileSystem);
+    private readonly AppendFileStreamCache _appendFileStreamCache = new(fileSystem);
     private static readonly Dictionary<string, int> FileWrites = new();
     private readonly Dictionary<(uint, string), string> _chunkNames = new();
     private readonly Dictionary<(uint, string), string> _chunkLogNames = new();
@@ -135,7 +135,7 @@ public class FileSystemPersistenceEngine(
             }
         }
         
-        _fileManager.Delete(path);
+        _appendFileStreamCache.DeleteFile(path);
         return changes;
     }
 
@@ -159,13 +159,13 @@ public class FileSystemPersistenceEngine(
     {
         using var chunkFileStream = fileSystem.File.Open(path, FileMode.Create);
         serializationEngine.Serialize(chunkFileStream, chunk, chunk.GetType());
-        _fileManager.Delete(changeFile);
+        _appendFileStreamCache.DeleteFile(changeFile);
         
     }
 
     private void AppendChunkChange(string path, ChunkChange chunkChange)
     { 
-        var stream = _fileManager.GetAppend(path);
+        var stream = _appendFileStreamCache.GetFileStream(path);
         
         using var ms = new MemoryStream();
         serializationEngine.Serialize(ms, chunkChange.ModelBase, chunkChange.ModelBase.GetType());
@@ -182,39 +182,5 @@ public class FileSystemPersistenceEngine(
         stream.Write(buffer);
         
         stream.Flush();
-    }
-}
-
-public class FileManager(IFileSystem fileSystem)
-{
-    private readonly Dictionary<string, Stream> _streams = new();
-
-    ~FileManager()
-    {
-        foreach (var stream in _streams.Values)
-        {
-            stream.Flush();
-            stream.Close();
-        }
-    }
-    
-    public Stream GetAppend(string path)
-    {
-        if (!_streams.TryGetValue(path, out var stream))
-        {
-            stream = fileSystem.File.Open(path, FileMode.Append);
-            _streams[path] = stream;
-        }
-
-        return stream;
-    }
-
-    public void Delete(string path)
-    {
-        if (_streams.Remove(path, out var stream))
-        {
-            stream.Dispose();
-        }
-        fileSystem.File.Delete(path);
     }
 }
