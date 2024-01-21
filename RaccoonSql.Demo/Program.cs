@@ -12,7 +12,7 @@ var modelStoreOptions = new ModelStoreOptions
     DefaultUpdateConflictBehavior = ConflictBehavior.Throw,
     DefaultUpsertConflictBehavior = ConflictBehavior.Throw,
     FindDefaultConflictBehavior = ConflictBehavior.Throw,
-    Root = "TestDB",
+    StoragePath = "TestDB",
 };
 var modelStore = new ModelStore(modelStoreOptions);
 

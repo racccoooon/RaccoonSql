@@ -11,8 +11,8 @@ namespace RaccoonSql.Core.Storage;
 public class ModelCollection<TModel>
     where TModel : ModelBase
 {
-    private const int ModelsPerChunk = 512;
-    private const int RehashThreshold = 66;
+    private readonly int _modelsPerChunk;
+    private readonly int _rehashThreshold;
 
     private readonly string _name;
 
@@ -33,10 +33,13 @@ public class ModelCollection<TModel>
 
     private IEnumerable<IIndex> AllIndices => _bTreeIndices.Values.Concat(_hashIndices.Values);
 
-    public ModelCollection(string name, FileSystemPersistenceEngine persistenceEngine)
+    public ModelCollection(string name, ModelStoreOptions options, FileSystemPersistenceEngine persistenceEngine)
     {
         _name = name;
         _persistenceEngine = persistenceEngine;
+        
+        _modelsPerChunk = options.ModelsPerChunk;
+        _rehashThreshold = options.RehashThreshold;
 
         var modelType = typeof(TModel);
 
@@ -277,7 +280,7 @@ public class ModelCollection<TModel>
 
     private void RehashIfNeeded()
     {
-        if (_modelCount * 100 / (_chunks.Length * ModelsPerChunk) <= RehashThreshold) return;
+        if (_modelCount * 100 / (_chunks.Length * _modelsPerChunk) <= _rehashThreshold) return;
 
         var newChunkCount = _chunks.Length * 2;
         var newChunks = new ModelCollectionChunk<TModel>[newChunkCount];

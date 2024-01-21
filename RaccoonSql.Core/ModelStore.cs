@@ -10,7 +10,7 @@ public class ModelStore(
 {
     private FileSystemPersistenceEngine PersistenceEngine { get; } = new(
         new FileSystem(),
-        options.Root,
+        options.StoragePath,
         new JsonSerializationEngine());
     
     private readonly Dictionary<string, object> _modelSets = new();
@@ -21,7 +21,7 @@ public class ModelStore(
         
         if (!_modelSets.TryGetValue(name, out var set))
         {
-            set = new ModelSet<TModel>(new ModelCollection<TModel>(name, PersistenceEngine), options);
+            set = new ModelSet<TModel>(new ModelCollection<TModel>(name, options, PersistenceEngine), options);
             _modelSets[name] = set;
         }
         
