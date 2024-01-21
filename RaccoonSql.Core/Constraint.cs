@@ -30,36 +30,12 @@ public class LengthCheckConstraintAttribute(int maxLength) : CheckConstraintAttr
 
 public class LengthCheckConstraint(int? minLength, int maxLength) : ICheckConstraint<ModelBase, string>
 {
-    public bool Check(ModelBase model, string value)
+    public bool Check(ModelBase model, string? value)
     {
+        if (value is null) return true;
+        
         var length = value.Length;
         return length >= minLength && length <= maxLength;
-    }
-}
-
-public class TypedCheckConstraintAttribute : CheckConstraintAttribute
-{
-    private readonly Type _implType;
-
-    public TypedCheckConstraintAttribute(Type implType)
-    {
-        //TODO: better check for generic version
-        if (!implType.GetInterfaces().Any(x => x.IsAssignableTo(typeof(ICheckConstraint))))
-            throw new ArgumentException($"{implType.Name} does not implement {nameof(ICheckConstraint)}",
-                nameof(implType));
-
-        _implType = implType;
-    }
-
-    //TODO: add support for injection/IServiceProvider
-    public override ICheckConstraint CreateConstraint(Type modelType, Type propertyType)
-    {
-        var type = _implType;
-        
-        if (_implType.IsGenericType)
-            type = _implType.MakeGenericType(propertyType);
-        
-        return (ICheckConstraint)Activator.CreateInstance(type)!;
     }
 }
 
