@@ -529,6 +529,6 @@ public class QueryPlan<TModel> where TModel : ModelBase
     
     public IEnumerable<Row<TModel>> Execute(ModelSet<TModel> collection, IQueryPlanParameterSource parameters)
     {
-        return Root.Execute(collection._modelCollection, parameters);
+        return Root.Execute(collection.ModelCollection, parameters);
     }
 }

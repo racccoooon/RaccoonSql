@@ -8,83 +8,83 @@ public class ModelSet<TModel>
 {
     private readonly ModelStoreOptions _modelStoreOptions;
 
-    internal readonly ModelCollection<TModel> _modelCollection;
+    internal readonly ModelCollection<TModel> ModelCollection;
 
     internal ModelSet(ModelCollection<TModel> modelCollection,
         ModelStoreOptions modelStoreOptions)
     {
-        _modelCollection = modelCollection;
+        ModelCollection = modelCollection;
         _modelStoreOptions = modelStoreOptions;
     }
     
     public void Insert(TModel model, ConflictBehavior? conflictBehavior = null)
     {
         conflictBehavior ??= _modelStoreOptions.DefaultInsertConflictBehavior;
-        if (!_modelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
+        if (!ModelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
             return;
         
         var cloned = (TModel) RuntimeHelpers.GetUninitializedObject(typeof(TModel));
         AutoMapper.Map(model, cloned);
         
-        var storageInfo = _modelCollection.GetStorageInfo(cloned.Id);
-        if (conflictBehavior.Value.ShouldThrow(storageInfo.Exists))
+        var storageInfo = ModelCollection.GetStorageInfo(cloned.Id);
+        if (conflictBehavior.Value.ShouldThrow(storageInfo.ChunkInfo.HasValue))
             throw new DuplicateIdException(typeof(TModel), cloned.Id);
         
-        _modelCollection.Write(cloned, storageInfo.ChunkInfo);
+        ModelCollection.Write(cloned, storageInfo.ChunkInfo);
     }
 
     public bool Exists(Guid id)
     {
-        var storageInfo = _modelCollection.GetStorageInfo(id);
-        return storageInfo.Exists;
+        var storageInfo = ModelCollection.GetStorageInfo(id);
+        return storageInfo.ChunkInfo.HasValue;
     }
 
     public TModel? Find(Guid id, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _modelCollection.GetStorageInfo(id);
-        if ((conflictBehavior ?? _modelStoreOptions.FindDefaultConflictBehavior).ShouldThrow(!storageInfo.Exists))
+        var storageInfo = ModelCollection.GetStorageInfo(id);
+        if ((conflictBehavior ?? _modelStoreOptions.FindDefaultConflictBehavior).ShouldThrow(!storageInfo.ChunkInfo.HasValue))
             throw new IdNotFoundException(typeof(TModel), id);
         return !storageInfo.ChunkInfo.HasValue 
             ? default 
-            : ModelProxyFactory.GenerateProxy(_modelCollection.Read(storageInfo.ChunkInfo!.Value));
+            : ModelProxyFactory.GenerateProxy(ModelCollection.Read(storageInfo.ChunkInfo!.Value));
     }
 
     public IEnumerable<TModel> All()
     {
-        return _modelCollection.GetAllRows().Select(x => ModelProxyFactory.GenerateProxy(x.Model));
+        return ModelCollection.GetAllRows().Select(x => ModelProxyFactory.GenerateProxy(x.Model));
     }
 
     public void Update(TModel model, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _modelCollection.GetStorageInfo(model.Id);
+        var storageInfo = ModelCollection.GetStorageInfo(model.Id);
         conflictBehavior ??= _modelStoreOptions.DefaultUpdateConflictBehavior;
-        if (conflictBehavior.Value.ShouldThrow(!storageInfo.Exists))
+        if (conflictBehavior.Value.ShouldThrow(!storageInfo.ChunkInfo.HasValue))
             throw new IdNotFoundException(typeof(TModel), model.Id);
 
         if (!storageInfo.ChunkInfo.HasValue) 
             return;
 
-        if (!_modelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
+        if (!ModelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
             return;
 
-        var writeModel = _modelCollection.Read(storageInfo.ChunkInfo.Value);
+        var writeModel = ModelCollection.Read(storageInfo.ChunkInfo.Value);
         AutoMapper.ApplyChanges(writeModel, model.Changes);
 
-        _modelCollection.Write(writeModel, storageInfo.ChunkInfo);
+        ModelCollection.Write(writeModel, storageInfo.ChunkInfo);
     }
 
     public void Upsert(TModel model, ConflictBehavior? conflictBehavior = null)
     {
         conflictBehavior ??= _modelStoreOptions.DefaultUpsertConflictBehavior;
-        if (!_modelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
+        if (!ModelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
             return;
 
-        var storageInfo = _modelCollection.GetStorageInfo(model.Id);
+        var storageInfo = ModelCollection.GetStorageInfo(model.Id);
 
         TModel writeModel;
         if (storageInfo.ChunkInfo.HasValue)
         {
-            writeModel = _modelCollection.Read(storageInfo.ChunkInfo.Value);
+            writeModel = ModelCollection.Read(storageInfo.ChunkInfo.Value);
             AutoMapper.ApplyChanges(writeModel, model.Changes);
         }
         else
@@ -93,15 +93,15 @@ public class ModelSet<TModel>
             AutoMapper.Map(model, writeModel);
         }
         
-        _modelCollection.Write(writeModel, storageInfo.ChunkInfo);
+        ModelCollection.Write(writeModel, storageInfo.ChunkInfo);
     }
 
     public void Remove(Guid id, ConflictBehavior? conflictBehavior = null)
     {
-        var storageInfo = _modelCollection.GetStorageInfo(id);
-        if ((conflictBehavior ?? _modelStoreOptions.DefaultRemoveConflictBehavior).ShouldThrow(!storageInfo.Exists)) 
+        var storageInfo = ModelCollection.GetStorageInfo(id);
+        if ((conflictBehavior ?? _modelStoreOptions.DefaultRemoveConflictBehavior).ShouldThrow(!storageInfo.ChunkInfo.HasValue)) 
             throw new IdNotFoundException(typeof(TModel), id);
         if (storageInfo.ChunkInfo != null) 
-            _modelCollection.Delete(storageInfo.ChunkInfo.Value);
+            ModelCollection.Delete(storageInfo.ChunkInfo.Value);
     }
 }
