@@ -30,7 +30,7 @@ public class ModelSet<TModel>
         if (conflictBehavior.Value.ShouldThrow(storageInfo.ChunkInfo.HasValue))
             throw new DuplicateIdException(typeof(TModel), cloned.Id);
         
-        ModelCollection.Write(cloned, storageInfo.ChunkInfo);
+        ModelCollection.Insert(cloned);
     }
 
     public bool Exists(Guid id)
@@ -46,7 +46,7 @@ public class ModelSet<TModel>
             throw new IdNotFoundException(typeof(TModel), id);
         return !storageInfo.ChunkInfo.HasValue 
             ? default 
-            : ModelProxyFactory.GenerateProxy(ModelCollection.Read(storageInfo.ChunkInfo!.Value));
+            : ModelProxyFactory.GenerateProxy(ModelCollection.Read(id));
     }
 
     public IEnumerable<TModel> All()
@@ -67,10 +67,7 @@ public class ModelSet<TModel>
         if (!ModelCollection.ExecuteChecksConstraints(model, conflictBehavior == ConflictBehavior.Throw))
             return;
 
-        var writeModel = ModelCollection.Read(storageInfo.ChunkInfo.Value);
-        AutoMapper.ApplyChanges(writeModel, model.Changes);
-
-        ModelCollection.Write(writeModel, storageInfo.ChunkInfo);
+        ModelCollection.Update(model, model.Changes);
     }
 
     public void Upsert(TModel model, ConflictBehavior? conflictBehavior = null)
@@ -84,7 +81,7 @@ public class ModelSet<TModel>
         TModel writeModel;
         if (storageInfo.ChunkInfo.HasValue)
         {
-            writeModel = ModelCollection.Read(storageInfo.ChunkInfo.Value);
+            writeModel = ModelCollection.Read(model.Id);
             AutoMapper.ApplyChanges(writeModel, model.Changes);
         }
         else
@@ -93,7 +90,7 @@ public class ModelSet<TModel>
             AutoMapper.Map(model, writeModel);
         }
         
-        ModelCollection.Write(writeModel, storageInfo.ChunkInfo);
+        ModelCollection.Insert(writeModel);
     }
 
     public void Remove(Guid id, ConflictBehavior? conflictBehavior = null)
@@ -102,6 +99,6 @@ public class ModelSet<TModel>
         if ((conflictBehavior ?? _modelStoreOptions.DefaultRemoveConflictBehavior).ShouldThrow(!storageInfo.ChunkInfo.HasValue)) 
             throw new IdNotFoundException(typeof(TModel), id);
         if (storageInfo.ChunkInfo != null) 
-            ModelCollection.Delete(storageInfo.ChunkInfo.Value);
+            ModelCollection.Delete(id);
     }
 }

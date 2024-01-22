@@ -15,7 +15,7 @@ public abstract class CheckConstraintAttribute : Attribute
 
 public class LengthCheckConstraintAttribute(int maxLength) : CheckConstraintAttribute
 {
-    private readonly int? _minLength;
+    private readonly int _minLength;
 
     public LengthCheckConstraintAttribute(int minLength, int maxLength) : this(maxLength)
     {
@@ -28,7 +28,7 @@ public class LengthCheckConstraintAttribute(int maxLength) : CheckConstraintAttr
     }
 }
 
-public class LengthCheckConstraint(int? minLength, int maxLength) : ICheckConstraint<ModelBase, string>
+public class LengthCheckConstraint(int minLength, int maxLength) : ICheckConstraint<ModelBase, string>
 {
     public bool Check(ModelBase model, string? value)
     {

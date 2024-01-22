@@ -10,4 +10,5 @@ public record ModelStoreOptions
     public ConflictBehavior DefaultUpdateConflictBehavior { get; init; } = ConflictBehavior.Throw;
     public ConflictBehavior DefaultUpsertConflictBehavior { get; init; } = ConflictBehavior.Throw;
     public ConflictBehavior DefaultRemoveConflictBehavior { get; init; } = ConflictBehavior.Ignore;
+    public int ChunkFlushThreshold { get; init; } = 256;
 }

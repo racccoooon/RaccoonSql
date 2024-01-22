@@ -3,9 +3,8 @@ using RaccoonSql.Core;
 
 namespace RaccoonSql.Demo.Models;
 
-[MemoryPackable]
 [Trigger(typeof(CarModelTrigger))]
-public partial class CarModel : ModelBase
+public class CarModel : ModelBase
 {
     [LengthCheckConstraint(50)]
     public virtual string Name { get; set; }

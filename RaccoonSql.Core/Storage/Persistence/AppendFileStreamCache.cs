@@ -15,7 +15,7 @@ public class AppendFileStreamCache(IFileSystem fileSystem)
         }
     }
     
-    public Stream GetFileStream(string path)
+    public Stream GetAppendStream(string path)
     {
         if (!_streams.TryGetValue(path, out var stream))
         {

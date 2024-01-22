@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Bogus;
 using Humanizer;
 using RaccoonSql.Core;
 using RaccoonSql.Core.Storage;
@@ -26,6 +27,8 @@ var car1 = new CarModel
 cars.Insert(car1);
 
 var found = cars.Find(car1.Id)!;
+found.Name = "New Name!"; 
+cars.Update(found);
 found.Name = "Super mega long name that is way too long or the check constraint >~<";
 try
 {
@@ -38,8 +41,8 @@ catch (Exception)
 
 cars.Remove(car1.Id);
 
-return;
 var persons = modelStore.Set<PersonModel>();
+
 /*
 var addressFaker = new Faker<Address>()
     .RuleFor(x => x.City, f => f.Address.City())
@@ -53,13 +56,16 @@ var personFaker = new Faker<PersonModel>()
 
 var personModels = personFaker.GenerateForever().Take(100_000).ToList();
 
+var s = Stopwatch.StartNew();
 foreach (var t in personModels)
 {
     persons.Insert(t);
 }
-
-return;
+s.Stop();
+Console.WriteLine(s.Elapsed.Humanize());
 */
+return;
+
 
 void range<T>(BPlusTree<T, Guid> index, T from, T to) where T : IComparable<T>, IEquatable<T>
 {

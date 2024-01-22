@@ -1,87 +1,138 @@
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using MemoryPack;
+using RaccoonSql.Core.Serialization;
+using RaccoonSql.Core.Storage.Persistence;
 
 namespace RaccoonSql.Core.Storage;
 
-[MemoryPackable]
-public partial class ModelCollectionChunk<TModel>
-    where TModel : ModelBase
+public class ModelCollectionChunk<TModel> where TModel : ModelBase
 {
     public List<TModel> Models { get; set; } = new();
 
-    public uint ModelCount => (uint)Models.Count;
-    
     [JsonIgnore]
-    public Dictionary<Guid, uint> ModelOffset { get; set; } = new();
+    public int ModelCount => Models.Count;
 
-    internal void Init()
+    private int _changes;
+    private string _setName;
+    private int _chunkId;
+    private ModelStoreOptions _options;
+    private FileSystemPersistenceEngine _persistenceEngine;
+
+    [JsonIgnore] public Dictionary<Guid, int> ModelIndexes { get; set; } = new();
+
+    internal void Init(string setName,
+        int chunkId,
+        ModelStoreOptions options,
+        FileSystemPersistenceEngine persistenceEngine)
     {
-        for (uint i = 0; i < Models.Count; i++)
+        for (int i = 0; i < Models.Count; i++)
         {
-            ModelOffset[Models[(int)i].Id] = i;
+            ModelIndexes[Models[i].Id] = i;
         }
+        
+        _setName = setName;
+        _chunkId = chunkId;
+        _options = options;
+        _persistenceEngine = persistenceEngine;
     }
-    
-    public ChunkChange WriteModel(uint offset, TModel model)
+
+    public TModel GetModel(Guid id)
     {
-        Debug.Assert(offset <= Models.Count, "offset <= _models.Count");
-        var add = Models.Count == offset;
-        if (add)
+        return Models[ModelIndexes[id]];
+    }
+
+    public void InsertModel(TModel model)
+    {
+        ModelIndexes[model.Id] = Models.Count;
+        Models.Add(model);
+
+        _changes++;
+
+        if (_changes >= _options.ChunkFlushThreshold)
         {
-            Models.Add(model);
+            _changes = 0;
+            _persistenceEngine.WriteChunk(_setName, _chunkId, this);
         }
         else
         {
-            Models[(int)offset] = model;
+            using var ms = new MemoryStream();
+            _persistenceEngine.SerializationEngine.Serialize(ms, model, typeof(TModel));
+            var change = new ChunkAddChange
+            {
+                SerializedModel = ms.ToArray(),
+            };
+            _persistenceEngine.AppendChunk(_setName, _chunkId, change);
         }
-
-        ModelOffset[model.Id] = offset;
-
-        return new ChunkChange
-        {
-            ModelBase = model,
-            Add = add,
-            Offset = offset,
-        };
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public TModel GetModel(uint offset)
+    public void UpdateModel(int index, TModel model)
     {
-        Debug.Assert(offset < Models.Count, "offset < _models.Count");
-        return Models[(int)offset];
+        _changes++;
+
+        if (_changes >= _options.ChunkFlushThreshold)
+        {
+            _changes = 0;
+            _persistenceEngine.WriteChunk(_setName, _chunkId, this);
+        }
+        else
+        {
+            using var ms = new MemoryStream();
+            _persistenceEngine.SerializationEngine.Serialize(ms, model, typeof(TModel));
+            var change = new ChunkUpdateChange
+            {
+                SerializedModel = ms.ToArray(),
+                Index = index,
+            };
+            _persistenceEngine.AppendChunk(_setName, _chunkId, change);   
+        }
     }
 
-    public Guid? DeleteModel(uint offset)
+    public void DeleteModel(Guid id)
     {
-        Debug.Assert(offset < Models.Count, "offset < _models.Count");
-        Guid? movedModelId = null;
-        var removedModelId = Models[(int)offset].Id;
-        if (offset < Models.Count - 1)
+        var index = ModelIndexes[id];
+        if (index < Models.Count - 1)
         {
-            Models[(int)offset] = Models[^1];
-            movedModelId = Models[(int)offset].Id;
+            Models[index] = Models[^1];
         }
 
         Models.RemoveAt(Models.Count - 1);
-        ModelOffset.Remove(removedModelId);
-        return movedModelId;
-    }
+        ModelIndexes.Remove(id);
 
-    public void Apply(ChunkChange change)
-    {
-        if (change.Add)
+        _changes++;
+        
+        if (_changes >= _options.ChunkFlushThreshold)
         {
-            ModelOffset[change.ModelBase.Id] = (uint)Models.Count;
-            Models.Add((TModel)change.ModelBase);
+            _changes = 0;
+            _persistenceEngine.WriteChunk(_setName, _chunkId, this);
         }
         else
         {
-            Models[(int)change.Offset] = (TModel)change.ModelBase;
-            ModelOffset[change.ModelBase.Id] = change.Offset;
+            var change = new ChunkDeleteChange
+            {
+                Index = index,
+            };
+            _persistenceEngine.AppendChunk(_setName, _chunkId, change);   
         }
-        
+    }
+
+    public void Apply(ChunkAddChange change)
+    {
+        using var ms = new MemoryStream(change.SerializedModel);
+        var model = (TModel)_persistenceEngine.SerializationEngine.Deserialize(ms, typeof(TModel));
+        ModelIndexes[model.Id] = Models.Count;
+        Models.Add(model);
+    }
+
+    public void Apply(ChunkUpdateChange change)
+    {
+        using var ms = new MemoryStream(change.SerializedModel);
+        var model = (TModel)_persistenceEngine.SerializationEngine.Deserialize(ms, typeof(TModel));
+        Models[change.Index] = model;
+    }
+
+    public void Apply(ChunkDeleteChange change)
+    {
+        ModelIndexes.Remove(Models[change.Index].Id);
+        Models[change.Index] = Models[^1];
     }
 }

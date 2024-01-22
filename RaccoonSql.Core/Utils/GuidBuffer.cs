@@ -6,7 +6,7 @@ namespace RaccoonSql.Core.Utils;
 internal unsafe struct GuidBuffer(Guid guid)
 {
     [FieldOffset(0)]
-    public fixed uint Int[4];
+    public fixed uint Uint[4];
 
     [FieldOffset(0)] 
     public Guid Guid = guid;

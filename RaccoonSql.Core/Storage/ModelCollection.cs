@@ -15,12 +15,13 @@ public class ModelCollection<TModel>
     private readonly int _rehashThreshold;
 
     private readonly string _name;
+    private readonly ModelStoreOptions _options;
 
     private readonly FileSystemPersistenceEngine _persistenceEngine;
 
     private ModelCollectionChunk<TModel>[] _chunks;
 
-    private uint _modelCount;
+    private int _modelCount;
 
     private Dictionary<string, IIndex> _bTreeIndices = [];
     private Dictionary<string, IIndex> _hashIndices = [];
@@ -33,11 +34,15 @@ public class ModelCollection<TModel>
 
     private IEnumerable<IIndex> AllIndices => _bTreeIndices.Values.Concat(_hashIndices.Values);
 
-    public ModelCollection(string name, ModelStoreOptions options, FileSystemPersistenceEngine persistenceEngine)
+    public ModelCollection(
+        string name,
+        ModelStoreOptions options,
+        FileSystemPersistenceEngine persistenceEngine)
     {
         _name = name;
+        _options = options;
         _persistenceEngine = persistenceEngine;
-        
+
         _modelsPerChunk = options.ModelsPerChunk;
         _rehashThreshold = options.RehashThreshold;
 
@@ -94,7 +99,7 @@ public class ModelCollection<TModel>
         var chunkCount = _persistenceEngine.GetChunkCount(name);
 
         _chunks = new ModelCollectionChunk<TModel>[chunkCount];
-        for (uint i = 0; i < _chunks.Length; i++)
+        for (int i = 0; i < _chunks.Length; i++)
         {
             var chunk = persistenceEngine.LoadChunk<TModel>(name, i, modelType);
 
@@ -167,12 +172,12 @@ public class ModelCollection<TModel>
         unsafe
         {
             var guidBuffer = new GuidBuffer(id);
-            var chunkId = guidBuffer.Int[3] % (uint)_chunks.Length;
+            var chunkId = (int)(guidBuffer.Uint[3] % _chunks.Length);
             var chunk = _chunks[chunkId];
             return new ChunkInfo
             {
                 ChunkId = chunkId,
-                Offset = chunk.ModelOffset[id],
+                Offset = chunk.ModelIndexes[id],
             };
         }
     }
@@ -182,14 +187,14 @@ public class ModelCollection<TModel>
         unsafe
         {
             var guidBuffer = new GuidBuffer(id);
-            var chunkId = guidBuffer.Int[3] % (uint)_chunks.Length;
+            var chunkId = (int)(guidBuffer.Uint[3] % _chunks.Length);
             var chunk = _chunks[chunkId];
-            var hasModel = chunk.ModelOffset.ContainsKey(id);
+            var hasModel = chunk.ModelIndexes.ContainsKey(id);
             ChunkInfo? chunkInfo = hasModel
                 ? new ChunkInfo
                 {
                     ChunkId = chunkId,
-                    Offset = chunk.ModelOffset[id],
+                    Offset = chunk.ModelIndexes[id],
                 }
                 : null;
             return new StorageInfo
@@ -230,51 +235,55 @@ public class ModelCollection<TModel>
         return true;
     }
 
-    public void Write(TModel model, ChunkInfo? chunkInfo)
+    public void Update(TModel newModel, Dictionary<string, object?> changes)
     {
-        if (chunkInfo is not null)
+        foreach (var trigger in _updateTriggers)
         {
-            foreach (var trigger in _updateTriggers)
-            {
-                //TODO: get the changes
-                trigger.OnUpdate(model, new Dictionary<string, object?>());
-            }
-
-            foreach (var index in AllIndices)
-            {
-                index.Update(_chunks[chunkInfo.Value.ChunkId].GetModel(chunkInfo.Value.Offset), model);
-            }
+            trigger.OnUpdate(newModel, changes);
         }
-        else
+        
+        var chunkId = CalculateChunkId(newModel.Id);
+        var chunk = _chunks[chunkId];
+        var modelIndex = chunk.ModelIndexes[newModel.Id];
+        var model = chunk.Models[modelIndex];
+
+        foreach (var index in AllIndices)
         {
-            foreach (var trigger in _createTriggers)
-            {
-                trigger.OnCreate(model);
-            }
-
-            _modelCount++;
-            RehashIfNeeded();
-            chunkInfo = DetermineChunkForInsert(model.Id);
-            foreach (var index in AllIndices)
-            {
-                index.Insert(model);
-            }
-        }
-
-        var chunk = _chunks[chunkInfo.Value.ChunkId];
-
-        var change = chunk.WriteModel(chunkInfo.Value.Offset, model);
-        _persistenceEngine.WriteChunk(_name, chunkInfo.Value.ChunkId, chunk, change);
+            index.Update(model, newModel);
+        }       
+        
+        AutoMapper.ApplyChanges(model, changes);
+        chunk.UpdateModel(modelIndex, newModel);
     }
 
-    private ChunkInfo DetermineChunkForInsert(Guid id)
+    public void Insert(TModel model)
+    {
+        foreach (var trigger in _createTriggers)
+        {
+            trigger.OnCreate(model);
+        }
+
+        _modelCount++;
+        RehashIfNeeded();
+
+        foreach (var index in AllIndices)
+        {
+            index.Insert(model);
+        }
+
+        var chunkId = CalculateChunkId(model.Id);
+        var chunk = _chunks[chunkId];
+
+        chunk.InsertModel(model);
+    }
+
+    private int CalculateChunkId(Guid id)
     {
         unsafe
         {
             var guidBuffer = new GuidBuffer(id);
-            var chunkId = guidBuffer.Int[3] % (uint)_chunks.Length;
-            var chunk = _chunks[chunkId];
-            return new ChunkInfo { ChunkId = chunkId, Offset = chunk.ModelCount };
+            var chunkId = (int)(guidBuffer.Uint[3] % _chunks.Length);
+            return chunkId;
         }
     }
 
@@ -286,7 +295,8 @@ public class ModelCollection<TModel>
         var newChunks = new ModelCollectionChunk<TModel>[newChunkCount];
         for (var i = 0; i < newChunks.Length; i++)
         {
-            newChunks[i] = new ModelCollectionChunk<TModel>();
+            var chunk = newChunks[i] = new ModelCollectionChunk<TModel>();
+            chunk.Init(_name, i, _options, _persistenceEngine);
         }
 
         var oldChunks = _chunks;
@@ -297,23 +307,25 @@ public class ModelCollection<TModel>
         {
             foreach (var model in oldChunk.Models)
             {
-                var chunkInfo = DetermineChunkForInsert(model.Id);
-                var chunk = _chunks[chunkInfo.ChunkId];
-                chunk.WriteModel(chunkInfo.Offset, model);
+                var chunkId = CalculateChunkId(model.Id);
+                var chunk = _chunks[chunkId];
+                chunk.InsertModel(model);
             }
         }
     }
 
-    public TModel Read(ChunkInfo chunkInfo)
+    public TModel Read(Guid id)
     {
-        var chunk = _chunks[chunkInfo.ChunkId];
-        return chunk.GetModel(chunkInfo.Offset);
+        var chunkId = CalculateChunkId(id);
+        var chunk = _chunks[chunkId];
+        return chunk.Models[chunk.ModelIndexes[id]];
     }
 
-    public void Delete(ChunkInfo chunkInfo)
+    public void Delete(Guid id)
     {
-        var chunk = _chunks[chunkInfo.ChunkId];
-        var model = chunk.GetModel(chunkInfo.Offset);
+        var chunkId = CalculateChunkId(id);
+        var chunk = _chunks[chunkId];
+        var model = chunk.Models[chunk.ModelIndexes[id]];
 
         foreach (var trigger in _deleteTriggers)
         {
@@ -325,18 +337,18 @@ public class ModelCollection<TModel>
             index.Remove(model);
         }
 
-        chunk.DeleteModel(chunkInfo.Offset);
+        chunk.DeleteModel(id);
     }
 
     public IEnumerable<Row<TModel>> GetAllRows()
     {
         // ReSharper disable once LoopCanBeConvertedToQuery
-        for (uint chunkId = 0; chunkId < _chunks.Length; chunkId++)
+        for (int chunkId = 0; chunkId < _chunks.Length; chunkId++)
         {
             var chunk = _chunks[chunkId];
-            for (uint modelOffset = 0; modelOffset < chunk.Models.Count; modelOffset++)
+            for (int modelOffset = 0; modelOffset < chunk.Models.Count; modelOffset++)
             {
-                var model = chunk.Models[(int)modelOffset];
+                var model = chunk.Models[modelOffset];
 
                 yield return new Row<TModel>()
                 {
