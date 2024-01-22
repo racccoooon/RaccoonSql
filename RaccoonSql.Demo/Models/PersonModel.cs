@@ -14,13 +14,5 @@ public partial class PersonModel : ModelBase
     [Index(IndexType.BTree)]
     public virtual required int Height { get; set; }
     
-    public virtual Address Address { get; set; }
-}
-
-[MemoryPackable]
-public partial record Address
-{
-    public required string Street { get; init; }
-    
-    public required string City { get; init; }
+    public virtual required string City { get; set; }
 }

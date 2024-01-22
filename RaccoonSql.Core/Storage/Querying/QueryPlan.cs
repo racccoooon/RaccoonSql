@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Text;
 
 namespace RaccoonSql.Core.Storage.Querying;
 
@@ -49,6 +50,11 @@ public readonly struct NamedQueryPlanParameter<T>(string name) : IQueryPlanParam
     {
         return source.RetrieveNamed<T>(name);
     }
+    
+    public override string ToString()
+    {
+        return $"[{name}]";
+    }
 }
 
 public readonly struct PositionalQueryPlanParameter<T>(int position) : IQueryPlanParameter<T>
@@ -56,6 +62,11 @@ public readonly struct PositionalQueryPlanParameter<T>(int position) : IQueryPla
     public T Retrieve(IQueryPlanParameterSource source)
     {
         return source.RetrievePositional<T>(position);
+    }
+
+    public override string ToString()
+    {
+        return $"[{position}]";
     }
 }
 
@@ -65,22 +76,43 @@ public readonly struct ConstantQueryPlanParameter<T>(T value) : IQueryPlanParame
     {
         return value;
     }
+
+    public override string ToString()
+    {
+        return value?.ToString() ?? "null";
+    }
 }
 
-public class QueryPlanSortComparer<TModel, T> : IComparer<Row<TModel>> where T : IComparable<T> where TModel : ModelBase
+public class QueryPlanSortComparer<TModel> : IComparer<Row<TModel>> where TModel : ModelBase
 {
-    private readonly Func<TModel, T> _accessor;
+    private readonly Func<TModel, IComparable> _accessor;
+    private readonly Expression<Func<TModel, IComparable>> _accessorExpression;
+    private readonly bool _descending;
 
-    public QueryPlanSortComparer(Func<TModel, T> accessor)
+    public QueryPlanSortComparer(Expression<Func<TModel, IComparable>> accessor, bool descending)
     {
-        _accessor = accessor;
+        _accessorExpression = accessor;
+        _accessor = accessor.Compile();
+        _descending = descending;
     }
 
     public int Compare(Row<TModel> x, Row<TModel> y)
     {
+        // TODO: we don't want to check _descending on every comparison, so instead generate a lambda that does it correctly in the constructor already
         var cmp = _accessor(x.Model).CompareTo(_accessor(y.Model));
-        if (cmp != 0) return cmp;
+        if (cmp != 0) return _descending ? -cmp : cmp;
         return x.ChunkInfo.CompareTo(y.ChunkInfo);
+    }
+
+    public override string ToString()
+    {
+        var str = _accessorExpression.Body.ToString();
+        if (_descending)
+        {
+            str += ", Descending";
+        }
+
+        return str;
     }
 }
 
@@ -181,6 +213,20 @@ public class QueryPlanMergeSorted<TModel> : IQueryPlanNode<TModel> where TModel 
             enumerator.Dispose();
         }
     }
+
+    public override string ToString()
+    {
+        StringBuilder builder = new();
+        builder.Append("Merge Sorted (Comparer = ");
+        builder.Append(Comparer);
+        builder.Append("\n");
+        foreach (var child in Children)
+        {
+            builder.Append(child.ToString()!.Indent());
+            builder.Append('\n');
+        }
+        return builder.ToString();
+    }
 }
 
 public class QueryPlanMergeUnsorted<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
@@ -201,6 +247,19 @@ public class QueryPlanMergeUnsorted<TModel> : IQueryPlanNode<TModel> where TMode
                 }
             }
         }
+    }
+
+    public override string ToString()
+    {
+        StringBuilder builder = new();
+        builder.Append("Merge Unsorted\n");
+        foreach (var child in Children)
+        {
+            builder.Append(child.ToString()!.Indent());
+            builder.Append('\n');
+        }
+
+        return builder.ToString();
     }
 }
 
@@ -230,6 +289,11 @@ public class ParameterizedPredicate<T>(
             return base.VisitConstant(node);
         }
     }
+
+    public override string ToString()
+    {
+        return expr.Body.ToString(); // TODO: print parameters correctly
+    }
 }
 
 public class QueryPlanPredicateFilter<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
@@ -249,6 +313,16 @@ public class QueryPlanPredicateFilter<TModel> : IQueryPlanNode<TModel> where TMo
                 yield return row;
             }
         }
+    }
+
+    public override string ToString()
+    {
+        StringBuilder builder = new();
+        builder.Append("Predicate Filter ");
+        builder.Append(Predicate);
+        builder.Append('\n');
+        builder.Append(Child.ToString()!.Indent());
+        return builder.ToString();
     }
 }
 
@@ -285,6 +359,19 @@ public class QueryPlanLimit<TModel> : IQueryPlanNode<TModel> where TModel : Mode
                 valid = enumerator.MoveNext();
             }
         }
+    }
+
+
+    public override string ToString()
+    {
+        StringBuilder builder = new();
+        builder.Append("Limit Skip=");
+        builder.Append(Skip);
+        builder.Append(" Take=");
+        builder.Append(Take);
+        builder.Append("\n");
+        builder.Append(Child.ToString()!.Indent());
+        return builder.ToString();
     }
 }
 
@@ -338,6 +425,25 @@ public class QueryPlanIndexScan<TModel> : IQueryPlanNode<TModel> where TModel : 
             }
         }
     }
+
+    public override string ToString()
+    {
+        StringBuilder builder = new();
+        builder.Append("Index Scan on ");
+        builder.Append(Name);
+        if (Descending)
+        {
+            builder.Append(" (Descending)");
+        }
+
+        if (Ranges != null)
+        {
+            builder.Append(" With Ranges ");
+            builder.Append(Ranges);
+        }
+
+        return builder.ToString();
+    }
 }
 
 public class ScanRanges
@@ -362,7 +468,7 @@ public class ScanRanges
         {
             var range = remaining.Pop();
             var merged = false;
-            
+
             foreach (var mergedRange in mergedRanges)
             {
                 if (mergedRange.Overlaps(range, backwards))
@@ -373,6 +479,7 @@ public class ScanRanges
                     break;
                 }
             }
+
             if (!merged)
             {
                 mergedRanges.Add(range);
@@ -512,6 +619,11 @@ public class QueryPlanSort<TModel> : IQueryPlanNode<TModel> where TModel : Model
         results.Sort(Comparer);
         return results;
     }
+
+    public override string ToString()
+    {
+        return $"Sort ({Comparer})\n{Child.ToString()!.Indent()}";
+    }
 }
 
 public class QueryPlanFullScan<TModel> : IQueryPlanNode<TModel> where TModel : ModelBase
@@ -521,14 +633,41 @@ public class QueryPlanFullScan<TModel> : IQueryPlanNode<TModel> where TModel : M
     {
         return collection.GetAllRows();
     }
+
+    public override string ToString()
+    {
+        return "Full Scan";
+    }
 }
 
 public class QueryPlan<TModel> where TModel : ModelBase
 {
     public required IQueryPlanNode<TModel> Root { get; init; }
-    
+
     public IEnumerable<Row<TModel>> Execute(ModelSet<TModel> collection, IQueryPlanParameterSource parameters)
     {
         return Root.Execute(collection.ModelCollection, parameters);
+    }
+
+    public override string ToString()
+    {
+        return $"QueryPlan for {typeof(TModel).Name}\n{Root.ToString()!.Indent()}";
+    }
+}
+
+public static class StringExtensions
+{
+    public static string Indent(this string str, string indentation = "  ", string separator = "\n")
+    {
+        StringBuilder builder = new();
+        foreach (var s in str.Split(separator))
+        {
+            builder.Append(indentation);
+            builder.Append(s);
+            builder.Append(separator);
+        }
+
+        builder.Remove(builder.Length - separator.Length, separator.Length);
+        return builder.ToString();
     }
 }

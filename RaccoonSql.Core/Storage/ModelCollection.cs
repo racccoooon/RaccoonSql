@@ -139,22 +139,7 @@ public class ModelCollection<TModel>
     public void CreateBTreeIndex<T>(Expression<Func<TModel, T>> expr)
         where T : IComparable<T>, IEquatable<T>
     {
-        var body = expr.Body as MemberExpression;
-        if (body is null)
-        {
-            throw new ArgumentException("index function for btree must be member expression");
-        }
-
-        Debug.Assert(expr.Parameters.Count == 1);
-        if (expr.Parameters[0] != body.Expression)
-        {
-            throw new ArgumentException("index function for btree must be member expression");
-        }
-
-        if (body.Member is not PropertyInfo propertyInfo)
-        {
-            throw new ArgumentException("index can only be created on a property");
-        }
+        var propertyInfo = ExpressionUtils.GetPropertyFromAccessor(expr);
 
         if (_bTreeIndices.ContainsKey(propertyInfo.Name))
         {
