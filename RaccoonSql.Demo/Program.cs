@@ -6,8 +6,21 @@ using Humanizer;
 using RaccoonSql.Core;
 using RaccoonSql.Core.Storage;
 using RaccoonSql.Core.Storage.Querying;
+using RaccoonSql.Core.Utils;
 using RaccoonSql.Demo.Models;
 
+var id = Guid.NewGuid();
+var b = new GuidBuffer(id);
+for (int i = 0; i < 4; i++)
+{
+    unsafe
+    {
+        Console.WriteLine($"{i}: b={b.Uint[i]} p={id.GetUint(i)}");
+    }
+}
+
+
+return;
 // var modelStoreOptions = new ModelStoreOptions
 // {
 //     DefaultInsertConflictBehavior = ConflictBehavior.Throw,

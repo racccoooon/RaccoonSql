@@ -4,6 +4,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RaccoonSql.Core", "RaccoonS
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RaccoonSql.Demo", "RaccoonSql.Demo\RaccoonSql.Demo.csproj", "{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RaccoonSql.CoreRework", "RaccoonSql.CoreRework\RaccoonSql.CoreRework.csproj", "{C54200FC-743C-42B0-9647-D207FC439D0E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReworkDemo", "ReworkDemo\ReworkDemo.csproj", "{C92DE82D-7528-4EA4-B419-BBA4ABD5659C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +22,13 @@ Global
 		{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F2F16E87-EFF8-4E67-A2BA-7169EAA9A73E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C54200FC-743C-42B0-9647-D207FC439D0E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C54200FC-743C-42B0-9647-D207FC439D0E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C54200FC-743C-42B0-9647-D207FC439D0E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C54200FC-743C-42B0-9647-D207FC439D0E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C92DE82D-7528-4EA4-B419-BBA4ABD5659C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C92DE82D-7528-4EA4-B419-BBA4ABD5659C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C92DE82D-7528-4EA4-B419-BBA4ABD5659C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C92DE82D-7528-4EA4-B419-BBA4ABD5659C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
