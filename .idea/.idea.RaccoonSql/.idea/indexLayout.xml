@@ -5,6 +5,7 @@
     <explicitIncludes />
     <explicitExcludes>
       <Path>RaccoonSql.Demo/TestDB</Path>
+      <Path>ReworkDemo/TestDB</Path>
     </explicitExcludes>
   </component>
 </project>

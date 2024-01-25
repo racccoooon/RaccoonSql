@@ -11,4 +11,16 @@
       <ProjectReference Include="..\RaccoonSql.CoreRework\RaccoonSql.CoreRework.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Compile Remove="TestDB\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Remove="TestDB\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="TestDB\**" />
+    </ItemGroup>
+
 </Project>

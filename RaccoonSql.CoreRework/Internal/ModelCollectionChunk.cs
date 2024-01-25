@@ -1,10 +1,36 @@
+using RaccoonSql.CoreRework.Internal.Persistence;
+
 namespace RaccoonSql.CoreRework.Internal;
 
-internal class ModelCollectionChunk<TModel>
+internal class ModelCollectionChunk<TModel>()
     where TModel : ModelBase
 {
     private readonly List<TModel> _models = [];
     private readonly Dictionary<Guid, int> _modelIndexes = [];
+    private int _operationCount;
+
+    // ReSharper disable once ConvertToAutoPropertyWhenPossible
+    internal int OperationCount
+    {
+        get => _operationCount;
+        set => _operationCount = value;
+    }
+
+    internal ModelCollectionChunk(ChunkData<TModel> data)
+        : this()
+    {
+        _models = data.Models;
+        _modelIndexes = data.ModelIndexes;
+    }
+
+    internal ChunkData<TModel> GetData()
+    {
+        return new ChunkData<TModel>
+        {
+            Models = _models,
+            ModelIndexes = _modelIndexes,
+        };
+    }
 
     public IEnumerable<TModel> Models => _models;
 
@@ -27,16 +53,18 @@ internal class ModelCollectionChunk<TModel>
         {
             (_models[modelIndex], _models[lastIndex]) = (_models[lastIndex], _models[modelIndex]);
         }
-        
+
         _models.RemoveAt(lastIndex);
         _modelIndexes.Remove(id);
+        _operationCount++;
     }
 
-    public void ApplyChanges(Guid id, Dictionary<string ,object?> modelChanges)
+    public void ApplyChanges(Guid id, Dictionary<string, object?> modelChanges)
     {
         var modelIndex = _modelIndexes[id];
         var model = _models[modelIndex];
         AutoMapper.ApplyChanges(model, modelChanges);
+        _operationCount++;
     }
 
     public void Add(TModel model)
@@ -44,5 +72,6 @@ internal class ModelCollectionChunk<TModel>
         _modelIndexes[model.Id] = _models.Count;
         var clone = AutoMapper.Clone(model);
         _models.Add(clone);
+        _operationCount++;
     }
 }

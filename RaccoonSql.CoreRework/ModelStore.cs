@@ -1,10 +1,17 @@
 using System.Collections.Concurrent;
+using System.IO.Abstractions;
 using System.Runtime.CompilerServices;
 using RaccoonSql.CoreRework.Internal;
 
 namespace RaccoonSql.CoreRework;
 
-public class ModelStore
+public record ModelStoreOptions
+{
+    public required string DirectoryPath { get; init; }
+    public required IFileSystem FileSystem { get; init; }
+}
+
+public class ModelStore(ModelStoreOptions options)
 {
     private readonly ConcurrentDictionary<Type, IModelCollection> _collections = [];
 
@@ -18,7 +25,7 @@ public class ModelStore
     {
         return (ModelCollection<TModel>)_collections.GetOrAdd(
             typeof(TModel),
-            _ => new ModelCollection<TModel>());
+            _ => new ModelCollection<TModel>(options));
     }
 
     internal void Commit(List<ChangeSet> commit)

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using RaccoonSql.CoreRework.Internal.Persistence;
 
 namespace RaccoonSql.CoreRework.Internal;
 
@@ -15,26 +16,69 @@ internal interface IModelCollection
 internal class ModelCollection<TModel> : IModelCollection
     where TModel : ModelBase
 {
+    private readonly ModelStoreOptions _options;
+    private readonly string _name;
+
+    private readonly ModelCollectionMetadata _metadata;
+
     public ReaderWriterLockSlim ReaderWriterLock { get; } = new();
 
     private readonly Dictionary<string, List<IModelValidator>> _propertyValidators = [];
     private readonly List<IModelValidator> _modelValidators = [];
 
     private ModelCollectionChunk<TModel>[] _collectionChunks = [];
-    private int _modelCount = 0;
+    private int _modelCount;
 
-    internal ModelCollection()
+    internal ModelCollection(ModelStoreOptions options)
     {
+        _options = options;
+        _name = typeof(TModel).Name;
+
         InitializeCheckConstraints();
+        _metadata = LoadMetadata();
         LoadChunks();
+    }
+
+    private ModelCollectionMetadata LoadMetadata()
+    {
+        const int initialChunkCount = 16;
+        var metadata = PersistenceEngine.Instance.ReadMetadata(
+            _options.FileSystem,
+            _options.DirectoryPath, 
+            _name);
+        
+        // ReSharper disable once InvertIf
+        if (metadata == null)
+        {
+            metadata = new ModelCollectionMetadata
+            {
+                ChunkCount = initialChunkCount,
+            };
+            
+            PersistenceEngine.Instance.WriteMetadata(
+                _options.FileSystem,
+                _options.DirectoryPath,
+                _name,
+                metadata);
+        }
+
+        return metadata;
     }
 
     private void LoadChunks()
     {
-        _collectionChunks = new ModelCollectionChunk<TModel>[16];
+        var chunkCount = _metadata.ChunkCount;
+
+        _collectionChunks = new ModelCollectionChunk<TModel>[chunkCount];
         for (var i = 0; i < _collectionChunks.Length; i++)
         {
-            _collectionChunks[i] = new ModelCollectionChunk<TModel>();
+            var loadedChunk = PersistenceEngine.Instance.ReadChunk<TModel>(
+                _options.FileSystem,
+                _options.DirectoryPath,
+                _name,
+                i);
+
+            _collectionChunks[i] = loadedChunk ?? new ModelCollectionChunk<TModel>();
         }
     }
 
@@ -55,7 +99,7 @@ internal class ModelCollection<TModel> : IModelCollection
                 {
                     propertyValidators = _propertyValidators[propertyInfo.Name] = [];
                 }
-                
+
                 propertyValidators.Add(attribute.GetValidator(propertyInfo));
             }
         }
@@ -117,20 +161,20 @@ internal class ModelCollection<TModel> : IModelCollection
         }
     }
 
-    private void EnsureCapacity(int additionalModelCount)
+    private bool EnsureCapacity(int additionalModelCount)
     {
         const int averageChunkSize = 1024;
         const float thresholdPerChunk = 0.66f * averageChunkSize;
 
-        if (_modelCount + additionalModelCount <= _collectionChunks.Length * thresholdPerChunk) 
-            return;
+        if (_modelCount + additionalModelCount <= _collectionChunks.Length * thresholdPerChunk)
+            return false;
 
         var newChunkCount = _collectionChunks.Length * 2;
         var newChunks = MakeNewChunks(newChunkCount);
 
         var oldChunks = _collectionChunks;
         _collectionChunks = newChunks;
-        
+
         foreach (var oldChunk in oldChunks)
         {
             foreach (var model in oldChunk.Models)
@@ -138,11 +182,13 @@ internal class ModelCollection<TModel> : IModelCollection
                 GetChunk(model.Id).Add(model);
             }
         }
+
+        return true;
     }
 
     private static ModelCollectionChunk<TModel>[] MakeNewChunks(int newChunkCount)
     {
-        var newChunks =new ModelCollectionChunk<TModel>[newChunkCount];
+        var newChunks = new ModelCollectionChunk<TModel>[newChunkCount];
 
         for (var i = 0; i < newChunks.Length; i++)
         {
@@ -154,24 +200,58 @@ internal class ModelCollection<TModel> : IModelCollection
 
     void IModelCollection.Apply(ChangeSet changeSet)
     {
+        HashSet<int> modifiedChunks = [];
+        //TODO: implement chunk changes and wal
+        
         foreach (var id in changeSet.Removed)
         {
-            GetChunk(id).Remove(id);
+            var chunkIndex = CalculateChunkIndex(id);
+            _collectionChunks[chunkIndex].Remove(id);
+            modifiedChunks.Add(chunkIndex);
         }
 
         foreach (var model in changeSet.Changed)
         {
-            GetChunk(model.Id).ApplyChanges(model.Id, model.Changes);
+            var chunkIndex = CalculateChunkIndex(model.Id);
+            _collectionChunks[chunkIndex].ApplyChanges(model.Id, model.Changes);
+            modifiedChunks.Add(chunkIndex);
         }
 
-        EnsureCapacity(changeSet.Added.Count);
-        
+        if (EnsureCapacity(changeSet.Added.Count))
+        {
+            _metadata.ChunkCount = _collectionChunks.Length;
+
+            modifiedChunks.Clear();
+            for (var i = 0; i < _collectionChunks.Length; i++)
+            {
+                modifiedChunks.Add(i);
+            }
+        }
+
         // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
         foreach (TModel model in changeSet.Added)
         {
-            GetChunk(model.Id).Add(model);
+            var chunkIndex = CalculateChunkIndex(model.Id);
+            _collectionChunks[chunkIndex].Add(model);
+            modifiedChunks.Add(chunkIndex);
         }
 
         _modelCount += changeSet.Added.Count;
+
+        foreach (var modifiedChunk in modifiedChunks)
+        {
+            PersistenceEngine.Instance.WriteChunk(
+                _options.FileSystem,
+                _options.DirectoryPath,
+                _name,
+                modifiedChunk,
+                _collectionChunks[modifiedChunk]);
+        }
+
+        PersistenceEngine.Instance.WriteMetadata(
+            _options.FileSystem,
+            _options.DirectoryPath,
+            _name,
+            _metadata);
     }
 }
