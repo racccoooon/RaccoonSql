@@ -14,6 +14,17 @@ var options = new ModelStoreOptions
 };
 var store = new ModelStore(options);
 
+// force loading
+{
+    using var transaction = store.Transaction();
+
+    var raccoons = transaction.Set<Raccoon>();
+
+    raccoons.Add(RaccoonGenerator());
+
+    transaction.Commit();
+}
+
 var hundredThousandRaccoons = Enumerable.Range(0, 100_000)
     .Select(_ => RaccoonGenerator())
     .ToList();

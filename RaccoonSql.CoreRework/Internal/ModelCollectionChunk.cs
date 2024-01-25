@@ -44,7 +44,7 @@ internal class ModelCollectionChunk<TModel>()
         return proxy;
     }
 
-    public void Remove(Guid id)
+    public int Remove(Guid id)
     {
         var modelIndex = _modelIndexes[id];
 
@@ -57,14 +57,17 @@ internal class ModelCollectionChunk<TModel>()
         _models.RemoveAt(lastIndex);
         _modelIndexes.Remove(id);
         _operationCount++;
-    }
 
-    public void ApplyChanges(Guid id, Dictionary<string, object?> modelChanges)
+        return modelIndex;
+    }
+    
+    public int ApplyChanges(Guid id, Dictionary<string, object?> modelChanges)
     {
         var modelIndex = _modelIndexes[id];
         var model = _models[modelIndex];
         AutoMapper.ApplyChanges(model, modelChanges);
         _operationCount++;
+        return modelIndex;
     }
 
     public void Add(TModel model)
@@ -73,5 +76,25 @@ internal class ModelCollectionChunk<TModel>()
         var clone = AutoMapper.Clone(model);
         _models.Add(clone);
         _operationCount++;
+    }
+
+    internal void Set(TModel? model, int index)
+    {
+        if (index == -1)
+        {
+            _models.Add(model!);
+            return;
+        }
+
+        if (model is null)
+        {
+            var lastIndex = _models.Count - 1;
+            (_models[lastIndex], _models[index]) = (_models[index], _models[lastIndex]);
+            _models.RemoveAt(lastIndex);
+        }
+        else
+        {
+            _models[index] = model;
+        }
     }
 }

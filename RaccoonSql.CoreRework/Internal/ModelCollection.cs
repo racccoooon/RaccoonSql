@@ -72,13 +72,11 @@ internal class ModelCollection<TModel> : IModelCollection
         _collectionChunks = new ModelCollectionChunk<TModel>[chunkCount];
         for (var i = 0; i < _collectionChunks.Length; i++)
         {
-            var loadedChunk = PersistenceEngine.Instance.ReadChunk<TModel>(
+            _collectionChunks[i] = PersistenceEngine.Instance.ReadChunk<TModel>(
                 _options.FileSystem,
                 _options.DirectoryPath,
                 _name,
                 i);
-
-            _collectionChunks[i] = loadedChunk ?? new ModelCollectionChunk<TModel>();
         }
     }
 
@@ -183,6 +181,8 @@ internal class ModelCollection<TModel> : IModelCollection
             }
         }
 
+        _metadata.ChunkCount = newChunkCount;
+
         return true;
     }
 
@@ -201,31 +201,37 @@ internal class ModelCollection<TModel> : IModelCollection
     void IModelCollection.Apply(ChangeSet changeSet)
     {
         HashSet<int> modifiedChunks = [];
-        //TODO: implement chunk changes and wal
         
-        foreach (var id in changeSet.Removed)
-        {
-            var chunkIndex = CalculateChunkIndex(id);
-            _collectionChunks[chunkIndex].Remove(id);
-            modifiedChunks.Add(chunkIndex);
-        }
+        Dictionary<int, LinkedList<TModel>> chunkedAdds = [];
+        Dictionary<int, LinkedList<(TModel model, int index)>> chunkedUpdates = [];
+        Dictionary<int, LinkedList<int>> chunkedDeletes = [];
 
-        foreach (var model in changeSet.Changed)
+        var isRehashed = false;
+
+        foreach (var removedId in changeSet.Removed)
         {
-            var chunkIndex = CalculateChunkIndex(model.Id);
-            _collectionChunks[chunkIndex].ApplyChanges(model.Id, model.Changes);
+            var chunkIndex = CalculateChunkIndex(removedId);
+            var modelIndex = _collectionChunks[chunkIndex].Remove(removedId);
             modifiedChunks.Add(chunkIndex);
+            GetChunkChanges(chunkedDeletes, chunkIndex).AddLast(modelIndex);
         }
 
         if (EnsureCapacity(changeSet.Added.Count))
         {
             _metadata.ChunkCount = _collectionChunks.Length;
+            isRehashed = true;
+        }
 
-            modifiedChunks.Clear();
-            for (var i = 0; i < _collectionChunks.Length; i++)
-            {
-                modifiedChunks.Add(i);
-            }
+        // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
+        foreach (TModel model in changeSet.Changed)
+        {
+            var chunkIndex = CalculateChunkIndex(model.Id);
+            var modelIndex = _collectionChunks[chunkIndex].ApplyChanges(model.Id, model.Changes);
+
+            if (isRehashed) continue;
+            
+            modifiedChunks.Add(chunkIndex);
+            GetChunkChanges(chunkedUpdates, chunkIndex).AddLast((model, modelIndex));
         }
 
         // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
@@ -233,25 +239,68 @@ internal class ModelCollection<TModel> : IModelCollection
         {
             var chunkIndex = CalculateChunkIndex(model.Id);
             _collectionChunks[chunkIndex].Add(model);
+
+            if (isRehashed) continue;
+            
             modifiedChunks.Add(chunkIndex);
+            GetChunkChanges(chunkedAdds, chunkIndex).AddLast(model);
         }
 
         _modelCount += changeSet.Added.Count;
 
-        foreach (var modifiedChunk in modifiedChunks)
+        if (isRehashed)
         {
-            PersistenceEngine.Instance.WriteChunk(
+            PersistenceEngine.Instance.WriteMetadata(
                 _options.FileSystem,
                 _options.DirectoryPath,
                 _name,
-                modifiedChunk,
-                _collectionChunks[modifiedChunk]);
+                _metadata);
+            
+            for (var i = 0; i < _collectionChunks.Length; i++)
+            {
+                modifiedChunks.Add(i);
+            }
         }
 
-        PersistenceEngine.Instance.WriteMetadata(
-            _options.FileSystem,
-            _options.DirectoryPath,
-            _name,
-            _metadata);
+        foreach (var modifiedChunk in modifiedChunks)
+        {
+            var chunk = _collectionChunks[modifiedChunk];
+            if(isRehashed || chunk.OperationCount > 1000)
+            {
+                PersistenceEngine.Instance.WriteChunk(
+                    _options.FileSystem,
+                    _options.DirectoryPath,
+                    _name,
+                    modifiedChunk,
+                    chunk);
+                
+                chunk.OperationCount = 0;
+            }
+            else
+            {
+                PersistenceEngine.Instance.WriteChunkChanges(
+                    _options.FileSystem,
+                    _options.DirectoryPath,
+                    _name,
+                    modifiedChunk,
+                    GetChunkChanges(chunkedAdds, modifiedChunk),
+                    GetChunkChanges(chunkedUpdates, modifiedChunk),
+                    GetChunkChanges(chunkedDeletes, modifiedChunk));
+            }
+        }
+        
+        return;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        // ReSharper disable once SuggestBaseTypeForParameter
+        LinkedList<T> GetChunkChanges<T>(Dictionary<int, LinkedList<T>> dictionary, int chunkIndex)
+        {
+            if (!dictionary.TryGetValue(chunkIndex, out var result))
+            {
+                result = dictionary[chunkIndex] = [];
+            }
+
+            return result;
+        }
     }
 }

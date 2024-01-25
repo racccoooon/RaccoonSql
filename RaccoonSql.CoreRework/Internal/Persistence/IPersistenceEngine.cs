@@ -1,5 +1,8 @@
+using System.Buffers;
 using System.IO.Abstractions;
 using System.Runtime.CompilerServices;
+using MemoryPack;
+using RaccoonSql.CoreRework.Internal.Utils;
 
 namespace RaccoonSql.CoreRework.Internal.Persistence;
 
@@ -16,7 +19,7 @@ internal interface IPersistenceEngine
         string collectionName,
         ModelCollectionMetadata metadata);
 
-    ModelCollectionChunk<TModel>? ReadChunk<TModel>(
+    ModelCollectionChunk<TModel> ReadChunk<TModel>(
         IFileSystem fileSystem,
         string rootPath,
         string collectionName,
@@ -30,15 +33,24 @@ internal interface IPersistenceEngine
         int chunkIndex,
         ModelCollectionChunk<TModel> collectionChunk
     ) where TModel : ModelBase;
+
+    void WriteChunkChanges<TModel>(
+        IFileSystem fileSystem,
+        string rootPath,
+        string collectionName,
+        int chunkIndex,
+        LinkedList<TModel> added,
+        LinkedList<(TModel model, int index)> updated,
+        LinkedList<int> deleted
+    ) where TModel : ModelBase;
 }
 
 internal class PersistenceEngine : IPersistenceEngine
 {
     public static readonly IPersistenceEngine Instance = new PersistenceEngine();
 
-    //TODO: refactor this whole class to take the filesystem in its constructor and not be static
-    private AppendFileStreamCache _appendFileStreamCache = new(new FileSystem());
-    
+    private readonly AppendFileStreamCache _appendFileStreamCache = new();
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string GetMetadataPath(
         IFileSystem fileSystem,
@@ -47,7 +59,7 @@ internal class PersistenceEngine : IPersistenceEngine
     {
         return fileSystem.Path.Combine(rootPath, $"{collectionName}.meta");
     }
-    
+
     public ModelCollectionMetadata? ReadMetadata(
         IFileSystem fileSystem,
         string rootPath,
@@ -85,7 +97,7 @@ internal class PersistenceEngine : IPersistenceEngine
         return fileSystem.Path.Combine(rootPath, $"{collectionName}.{chunkIndex}.chunk");
     }
 
-    public ModelCollectionChunk<TModel>? ReadChunk<TModel>(
+    public ModelCollectionChunk<TModel> ReadChunk<TModel>(
         IFileSystem fileSystem,
         string rootPath,
         string collectionName,
@@ -93,14 +105,78 @@ internal class PersistenceEngine : IPersistenceEngine
         where TModel : ModelBase
     {
         var path = GetChunkPath(fileSystem, rootPath, collectionName, chunkIndex);
+        var walPath = GetChunkWalPath(fileSystem, rootPath, collectionName, chunkIndex);
 
-        if (!fileSystem.File.Exists(path))
-            return null;
+        ModelCollectionChunk<TModel> result;
 
-        using var stream = fileSystem.File.OpenRead(path);
-        var chunkData = SerialisationEngine.Instance.DeserializeChunkData<TModel>(stream);
+        if (fileSystem.File.Exists(path))
+        {
+            using var stream = fileSystem.File.OpenRead(path);
+            var chunkData = SerialisationEngine.Instance.DeserializeChunkData<TModel>(stream);
+            result = new ModelCollectionChunk<TModel>(chunkData);
+        }
+        else
+        {
+            result = new ModelCollectionChunk<TModel>();
+        }
 
-        return new ModelCollectionChunk<TModel>(chunkData);
+        // ReSharper disable once InvertIf
+        if (fileSystem.File.Exists(walPath))
+        {
+            using var stream = fileSystem.File.OpenRead(walPath);
+            var lengthBuffer = new byte[4];
+            var dataBuffer = new byte[1024];
+
+            while (true)
+            {
+                try
+                {
+                    stream.ReadExactly(lengthBuffer);
+                }
+                catch (EndOfStreamException)
+                {
+                    break;
+                }
+
+                var length = BitConverter.ToInt32(lengthBuffer, 0);
+                if (dataBuffer.Length < length)
+                {
+                    dataBuffer = new byte[length * 2];
+                }
+
+                stream.ReadExactly(dataBuffer, 0, length);
+
+                var readOnlySequence = new ReadOnlySequence<byte>(dataBuffer, 0, length);
+                var change = MemoryPackSerializer.Deserialize<IChange>(readOnlySequence)!;
+
+                switch (change)
+                {
+                    case AddChange addChange:
+                    {
+                        using var ms = new MemoryStream(addChange.Serialized);
+                        var addModel = SerialisationEngine.Instance.DeserializeModel<TModel>(ms);
+                        result.Set(addModel, -1);
+                        break;
+                    }
+
+                    case UpdateChange updateChange:
+                    {
+                        using var ms = new MemoryStream(updateChange.Serialized);
+                        var addModel = SerialisationEngine.Instance.DeserializeModel<TModel>(ms);
+                        result.Set(addModel, updateChange.Index);
+                        break;
+                    }
+
+                    case DeleteChange deleteChange:
+                    {
+                        result.Set(null, deleteChange.Index);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     public void WriteChunk<TModel>(
@@ -116,7 +192,95 @@ internal class PersistenceEngine : IPersistenceEngine
         using var stream = fileSystem.File.Open(path, FileMode.Create);
         SerialisationEngine.Instance.SerializeChunkData(stream, collectionChunk.GetData());
         stream.Flush();
-        
-        collectionChunk.OperationCount = 0;
+
+        var walPath = GetChunkWalPath(fileSystem, rootPath, collectionName, chunkIndex);
+        _appendFileStreamCache.DeleteFile(fileSystem, walPath);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string GetChunkWalPath(
+        IFileSystem fileSystem,
+        string rootPath,
+        string collectionName,
+        int chunkIndex)
+    {
+        return fileSystem.Path.Combine(rootPath, $"{collectionName}.{chunkIndex}.chunk.wal");
+    }
+
+    public void WriteChunkChanges<TModel>(
+        IFileSystem fileSystem,
+        string rootPath,
+        string collectionName,
+        int chunkIndex,
+        LinkedList<TModel> added,
+        LinkedList<(TModel model, int index)> updated,
+        LinkedList<int> deleted)
+        where TModel : ModelBase
+    {
+        var path = GetChunkWalPath(fileSystem, rootPath, collectionName, chunkIndex);
+
+        var stream = _appendFileStreamCache.GetAppendStream(fileSystem, path);
+
+        foreach (var model in added)
+        {
+            AppendAddChange(stream, model);
+        }
+
+        foreach (var modelAndIndex in updated)
+        {
+            AppendUpdateChange(stream, modelAndIndex);
+        }
+
+        foreach (var index in deleted)
+        {
+            AppendDeleteChange(stream, index);
+        }
+
+        stream.Flush();
+    }
+
+    private static void AppendAddChange<TModel>(Stream stream, TModel model)
+        where TModel : ModelBase
+    {
+        using var ms = new MemoryStream();
+        SerialisationEngine.Instance.SerializeModel(ms, model);
+        var change = new AddChange
+        {
+            Serialized = ms.ToArray(),
+        };
+
+        AppendChange(stream, change);
+    }
+
+    private static void AppendUpdateChange<TModel>(Stream stream, (TModel model, int index) modelAndIndex)
+        where TModel : ModelBase
+    {
+        using var ms = new MemoryStream();
+        SerialisationEngine.Instance.SerializeModel(ms, modelAndIndex.model);
+        var change = new UpdateChange
+        {
+            Serialized = ms.ToArray(),
+            Index = modelAndIndex.index,
+        };
+
+        AppendChange(stream, change);
+    }
+
+    private static void AppendDeleteChange(Stream stream, int index)
+    {
+        var change = new DeleteChange
+        {
+            Index = index,
+        };
+
+        AppendChange(stream, change);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AppendChange(Stream stream, IChange change)
+    {
+        var buffer = MemoryPackSerializer.Serialize(change);
+        stream.Write(BitConverter.GetBytes(buffer.Length));
+        stream.Write(buffer, 0, buffer.Length);
     }
 }

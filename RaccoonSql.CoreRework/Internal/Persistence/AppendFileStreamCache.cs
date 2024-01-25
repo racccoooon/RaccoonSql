@@ -2,7 +2,7 @@ using System.IO.Abstractions;
 
 namespace RaccoonSql.CoreRework.Internal.Persistence;
 
-public class AppendFileStreamCache(IFileSystem fileSystem)
+public class AppendFileStreamCache
 {
     private readonly Dictionary<string, Stream> _streams = new();
 
@@ -15,24 +15,23 @@ public class AppendFileStreamCache(IFileSystem fileSystem)
         }
     }
     
-    public Stream GetAppendStream(string path)
+    public Stream GetAppendStream(IFileSystem fileSystem, string path)
     {
         // ReSharper disable once InvertIf
         if (!_streams.TryGetValue(path, out var stream))
         {
-            stream = fileSystem.File.Open(path, FileMode.Append);
-            _streams[path] = stream;
+            stream = _streams[path] = fileSystem.File.Open(path, FileMode.Append);
         }
 
         return stream;
     }
 
-    public void DeleteFile(string path)
+    public void DeleteFile(IFileSystem fileSystem, string path)
     {
-        if (_streams.Remove(path, out var stream))
-        {
-            stream.Dispose();
-        }
+        if (!_streams.Remove(path, out var stream)) 
+            return;
+        
+        stream.Dispose();
         fileSystem.File.Delete(path);
     }
 }
