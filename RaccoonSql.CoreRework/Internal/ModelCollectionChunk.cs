@@ -33,6 +33,7 @@ internal class ModelCollectionChunk<TModel>()
     }
 
     public IEnumerable<TModel> Models => _models;
+    public int ModelCount => _models.Count;
 
     public TModel? Find(Guid id)
     {

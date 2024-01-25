@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using RaccoonSql.CoreRework.Internal.Persistence;
@@ -70,14 +71,15 @@ internal class ModelCollection<TModel> : IModelCollection
         var chunkCount = _metadata.ChunkCount;
 
         _collectionChunks = new ModelCollectionChunk<TModel>[chunkCount];
-        for (var i = 0; i < _collectionChunks.Length; i++)
+        Parallel.ForEach(Enumerable.Range(0, _collectionChunks.Length), i =>
         {
             _collectionChunks[i] = PersistenceEngine.Instance.ReadChunk<TModel>(
                 _options.FileSystem,
                 _options.DirectoryPath,
                 _name,
                 i);
-        }
+        });
+        _modelCount = _collectionChunks.Sum(x => x.ModelCount);
     }
 
     private void InitializeCheckConstraints()
@@ -226,11 +228,13 @@ internal class ModelCollection<TModel> : IModelCollection
         foreach (TModel model in changeSet.Changed)
         {
             var chunkIndex = CalculateChunkIndex(model.Id);
-            var modelIndex = _collectionChunks[chunkIndex].ApplyChanges(model.Id, model.Changes);
+            var chunk = _collectionChunks[chunkIndex];
+            var modelIndex = chunk.ApplyChanges(model.Id, model.Changes);
 
             if (isRehashed) continue;
             
             modifiedChunks.Add(chunkIndex);
+            Debug.Assert(chunk.ModelCount > modelIndex);
             GetChunkChanges(chunkedUpdates, chunkIndex).AddLast((model, modelIndex));
         }
 

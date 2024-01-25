@@ -162,8 +162,8 @@ internal class PersistenceEngine : IPersistenceEngine
                     case UpdateChange updateChange:
                     {
                         using var ms = new MemoryStream(updateChange.Serialized);
-                        var addModel = SerialisationEngine.Instance.DeserializeModel<TModel>(ms);
-                        result.Set(addModel, updateChange.Index);
+                        var updateModel = SerialisationEngine.Instance.DeserializeModel<TModel>(ms);
+                        result.Set(updateModel, updateChange.Index);
                         break;
                     }
 

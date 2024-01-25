@@ -2,11 +2,13 @@
 
 using System.Diagnostics;
 using System.IO.Abstractions;
+using System.Reflection;
 using Humanizer;
 using RaccoonSql.CoreRework;
 
-Console.WriteLine("Hello, World!");
+Console.WriteLine("Hello, Raccoon-World!");
 
+var startUpWatch = Stopwatch.StartNew();
 var options = new ModelStoreOptions
 {
     DirectoryPath = "TestDB",
@@ -24,6 +26,18 @@ var store = new ModelStore(options);
 
     transaction.Commit();
 }
+startUpWatch.Stop();
+using (var transaction = store.Transaction())
+{
+    var collection = typeof(ModelSet<Raccoon>)
+        .GetField("_modelCollection", BindingFlags.Instance | BindingFlags.NonPublic)!
+        .GetValue(transaction.Set<Raccoon>())!;
+    var raccoonCount = collection
+        .GetType()
+        .GetField("_modelCount", BindingFlags.Instance | BindingFlags.NonPublic)!
+        .GetValue(collection)!;
+    Console.WriteLine($"Loaded {raccoonCount} raccoons in {startUpWatch.Elapsed.Humanize()}");
+}
 
 var hundredThousandRaccoons = Enumerable.Range(0, 100_000)
     .Select(_ => RaccoonGenerator())
@@ -40,7 +54,7 @@ var watch = Stopwatch.StartNew();
     transaction.Commit();
 }
 watch.Stop();
-Console.WriteLine(watch.Elapsed.Humanize());
+Console.WriteLine($"Inserted 100.000 raccoons in a single transaction in {watch.Elapsed.Humanize()}");
 
 watch.Reset();
 for (var i = 0; i < 100; i++)
@@ -49,7 +63,6 @@ for (var i = 0; i < 100; i++)
         .Select(_ => RaccoonGenerator())
         .ToList();
     
-    Console.WriteLine($"transaction: {i}");
     watch.Start();
     {
         using var transaction = store.Transaction();
@@ -62,7 +75,7 @@ for (var i = 0; i < 100; i++)
     }
     watch.Stop();
 }
-Console.WriteLine(watch.Elapsed.Humanize());
+Console.WriteLine($"Inserted 100.000 raccoons (100 transactions with 1.000 raccoons) in {watch.Elapsed.Humanize()}");
 
 
 Guid raccoonId;

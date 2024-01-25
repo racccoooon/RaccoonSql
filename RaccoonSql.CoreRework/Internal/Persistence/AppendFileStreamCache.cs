@@ -28,10 +28,11 @@ public class AppendFileStreamCache
 
     public void DeleteFile(IFileSystem fileSystem, string path)
     {
-        if (!_streams.Remove(path, out var stream)) 
-            return;
+        if (_streams.Remove(path, out var stream))
+        {
+            stream.Dispose();
+        } 
         
-        stream.Dispose();
         fileSystem.File.Delete(path);
     }
 }
