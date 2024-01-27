@@ -1,17 +1,38 @@
 using System.Collections.Concurrent;
 using System.IO.Abstractions;
 using System.Runtime.CompilerServices;
+using JetBrains.Annotations;
 using RaccoonSql.CoreRework.Internal;
 
 namespace RaccoonSql.CoreRework;
 
+/// <summary>
+/// The options for setting up the <see cref="IModelStore"/>.
+/// </summary>
 public record ModelStoreOptions
 {
     public required string DirectoryPath { get; init; }
     public required IFileSystem FileSystem { get; init; }
 }
 
-public class ModelStore(ModelStoreOptions options)
+/// <summary>
+/// The central access point for the database.
+/// Allows access to the database via transactions.
+/// </summary>
+[PublicAPI]
+public interface IModelStore
+{
+    /// <summary>
+    /// Creates an <see cref="ITransaction"/> with the provided <see cref="TransactionOptions"/>.
+    /// </summary>
+    /// <param name="transactionOptions">The options for the <see cref="ITransaction"/>.</param>
+    /// <returns>A new <see cref="ITransaction>"/>.</returns>
+    ITransaction Transaction(TransactionOptions transactionOptions = default);
+}
+
+/// <inheritdoc cref="IModelStore"/>
+/// <param name="options">The options for the database.</param>
+public sealed class ModelStore(ModelStoreOptions options) : IModelStore
 {
     private readonly ConcurrentDictionary<Type, IModelCollection> _collections = [];
 

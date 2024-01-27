@@ -1,8 +1,14 @@
+using JetBrains.Annotations;
 using RaccoonSql.CoreRework.Internal;
 
 namespace RaccoonSql.CoreRework;
 
-public class ChangeTracker<TModel> 
+/// <summary>
+/// Tracks the changes in a <see cref="IModelSet{TModel}"/>.
+/// The tracked changes will be applied to the database when the transaction is committed.
+/// </summary>
+/// <typeparam name="TModel">The type of model.</typeparam>
+public sealed class ChangeTracker<TModel> 
     where TModel : ModelBase
 {
     private readonly Dictionary<Guid, TModel> _addedModels = [];
@@ -10,11 +16,21 @@ public class ChangeTracker<TModel>
     private readonly List<Guid> _modifiedModelIds = [];
     private readonly HashSet<Guid> _deletedModelIds = [];
 
+    /// <summary>
+    /// Gets the models that are added to the <see cref="IModelSet{TModel}"/> in this transaction.
+    /// </summary>
+    /// <returns>The added models.</returns>
+    [PublicAPI]
     public IEnumerable<TModel> GetAdded()
     {
         return _addedModels.Values;
     }
 
+    /// <summary>
+    /// Returns all tracked models from in this transaction for the <see cref="IModelSet{TModel}"/>.
+    /// </summary>
+    /// <returns>All tracked models (added and loaded).</returns>
+    [PublicAPI]
     public IEnumerable<TModel> GetTracked()
     {
         foreach (var model in GetAdded())
