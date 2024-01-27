@@ -1,4 +1,5 @@
 using Castle.DynamicProxy;
+using RaccoonSql.CoreRework.Internal.Utils;
 
 namespace RaccoonSql.CoreRework.Internal;
 

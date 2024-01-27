@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
-namespace RaccoonSql.CoreRework.Internal;
+namespace RaccoonSql.CoreRework.Internal.Utils;
 
 internal static class AutoMapper
 {
@@ -10,7 +10,27 @@ internal static class AutoMapper
 
     public static void ApplyChanges<T>(T t, Dictionary<string, object?> changes)
     {
-        var setters = Setters[typeof(T)];
+        var type = typeof(T);
+        if (!Setters.TryGetValue(type, out var setters))
+        {
+            setters = [];
+            var propertyInfos = type.GetProperties();
+
+            foreach (var propertyInfo in propertyInfos)
+            {
+                var pTarget = Expression.Parameter(typeof(object));
+                var setterValue = Expression.Parameter(typeof(object));
+                var castedValue = Expression.Convert(setterValue, propertyInfo.PropertyType);
+                var valueSetter = Expression.Call(Expression.Convert(pTarget, type), propertyInfo.SetMethod!, castedValue);
+                var setterAction = Expression.Lambda<Action<object, object>>(valueSetter, [pTarget, setterValue]);
+                var compiledSetter = setterAction.Compile();
+
+                setters[propertyInfo.Name] = compiledSetter;
+            }
+
+            Setters[type] = setters;
+        }
+        
         foreach (var (key, value) in changes)
         {
             setters[key].Invoke(t!, value!);
@@ -30,8 +50,6 @@ internal static class AutoMapper
         if (!Mappings.TryGetValue(type, out var mappings))
         {
             mappings = [];
-            
-            var setters = new Dictionary<string, Action<object, object>>();
             var propertyInfos = type.GetProperties();
 
             foreach (var propertyInfo in propertyInfos)
@@ -49,17 +67,9 @@ internal static class AutoMapper
                 
                 mappings.Add(compiledCopy);
                 
-                var setterValue = Expression.Parameter(typeof(object));
-                var castedValue = Expression.Convert(setterValue, propertyInfo.PropertyType);
-                var valueSetter = Expression.Call(Expression.Convert(pTarget, typeof(T)), propertyInfo.SetMethod!, castedValue);
-                var setterAction = Expression.Lambda<Action<object, object>>(valueSetter, [pTarget, setterValue]);
-                var compiledSetter = setterAction.Compile();
-
-                setters[propertyInfo.Name] = compiledSetter;
             }
 
             Mappings[type] = mappings;
-            Setters[type] = setters;
         }
 
         foreach (var mapping in mappings)
