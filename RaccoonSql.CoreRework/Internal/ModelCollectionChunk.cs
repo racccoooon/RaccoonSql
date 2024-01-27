@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using RaccoonSql.CoreRework.Internal.Persistence;
 
 namespace RaccoonSql.CoreRework.Internal;
@@ -50,6 +51,7 @@ internal class ModelCollectionChunk<TModel>()
         var modelIndex = _modelIndexes[id];
 
         var lastIndex = _models.Count - 1;
+        Debug.Assert(modelIndex <= lastIndex);
         if (modelIndex != lastIndex)
         {
             (_models[modelIndex], _models[lastIndex]) = (_models[lastIndex], _models[modelIndex]);

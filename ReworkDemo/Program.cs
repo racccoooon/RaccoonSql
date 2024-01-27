@@ -57,6 +57,7 @@ using (var transaction = store.Transaction())
 var hundredThousandRaccoons = Enumerable.Range(0, 100_000)
     .Select(_ => raccoonFaker.Generate())
     .ToList();
+var raccoonIds = hundredThousandRaccoons.Select(x => x.Id).ToList();
 
 var watch = Stopwatch.StartNew();
 {
@@ -71,12 +72,46 @@ var watch = Stopwatch.StartNew();
 watch.Stop();
 Console.WriteLine($"Inserted 100.000 raccoons in a single transaction in {watch.Elapsed.Humanize()}");
 
+
+watch.Restart();
+{
+    using var transaction = store.Transaction();
+
+    var raccoons = transaction.Set<Raccoon>();
+
+    foreach (var raccoon in raccoonIds.Select(x => raccoons.Find(x)!))
+    {
+        raccoon.Age += 1;
+    }
+
+    transaction.Commit();
+}
+watch.Stop();
+Console.WriteLine($"Aged 100.000 raccoons in a single transaction in {watch.Elapsed.Humanize()}");
+
+watch.Start();
+{
+    using var transaction = store.Transaction();
+
+    var raccoons = transaction.Set<Raccoon>();
+
+    raccoons.Remove(raccoonIds.Select(x => raccoons.Find(x)!));
+
+    transaction.Commit();
+}
+watch.Stop();
+Console.WriteLine($"Freed 100.000 raccoons in a single transaction in {watch.Elapsed.Humanize()}");
+
+var updateWatch = Stopwatch.StartNew();
+var deleteWatch = Stopwatch.StartNew();
 watch.Reset();
 for (var i = 0; i < 100; i++)
 {
     var oneThousandRaccoons = Enumerable.Range(0, 1000)
         .Select(_ => raccoonFaker.Generate())
         .ToList();
+
+    var oneThousandIds = oneThousandRaccoons.Select(x => x.Id).ToList();
     
     watch.Start();
     {
@@ -89,8 +124,39 @@ for (var i = 0; i < 100; i++)
         transaction.Commit();
     }
     watch.Stop();
+    
+    
+    updateWatch.Start();
+    {
+        using var transaction = store.Transaction();
+
+        var raccoons = transaction.Set<Raccoon>();
+
+        foreach (var raccoon in oneThousandIds.Select(x => raccoons.Find(x)!))
+        {
+            raccoon.Age += 1;
+        }
+
+        transaction.Commit();
+    }
+    updateWatch.Stop();
+    
+    
+    deleteWatch.Start();
+    {
+        using var transaction = store.Transaction();
+
+        var raccoons = transaction.Set<Raccoon>();
+
+        raccoons.Remove(oneThousandIds.Select(x => raccoons.Find(x)!));
+
+        transaction.Commit();
+    }
+    deleteWatch.Stop();
 }
 Console.WriteLine($"Inserted 100.000 raccoons (100 transactions with 1.000 raccoons) in {watch.Elapsed.Humanize()}");
+Console.WriteLine($"Aged 100.000 raccoons (100 transactions with 1.000 raccoons) in {updateWatch.Elapsed.Humanize()}");
+Console.WriteLine($"Freed 100.000 raccoons (100 transactions with 1.000 raccoons) in {deleteWatch.Elapsed.Humanize()}");
 
 
 Guid raccoonId;
