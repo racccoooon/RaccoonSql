@@ -15,7 +15,6 @@ internal static class ModelProxyFactory
             typeof(TModel),
             [typeof(IModelProxy)], 
             [Interceptor]);
-
         
         AutoMapper.Map(source, model);
         

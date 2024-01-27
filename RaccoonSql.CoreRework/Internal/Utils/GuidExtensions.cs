@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace RaccoonSql.CoreRework.Internal;
+namespace RaccoonSql.CoreRework.Internal.Utils;
 
 public static class GuidExtensions
 {

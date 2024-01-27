@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using RaccoonSql.CoreRework.Internal.Persistence;
+using RaccoonSql.CoreRework.Internal.Utils;
 
 namespace RaccoonSql.CoreRework.Internal;
 
