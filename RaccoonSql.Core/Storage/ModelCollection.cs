@@ -4,7 +4,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using RaccoonSql.Core.Storage.Persistence;
 using RaccoonSql.Core.Utils;
-using RaccoonSql.Demo.Models;
 
 namespace RaccoonSql.Core.Storage;
 
@@ -395,7 +394,8 @@ public class BTreeIndex<T> : IIndex
     public IEnumerable<ModelBase> Scan(object from, object to, bool fromSet, bool toSet, bool fromInclusive,
         bool toInclusive, bool backwards)
     {
-        return _tree.FunkyRange((T)from ?? default, (T)to ?? default, fromSet, toSet, !fromInclusive, !toInclusive,
+        // ReSharper disable twice NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+        return _tree.FunkyRange((T)from ?? default!, (T)to ?? default!, fromSet, toSet, !fromInclusive, !toInclusive,
             backwards);
     }
 

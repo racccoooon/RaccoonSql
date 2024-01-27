@@ -1,4 +1,4 @@
-namespace RaccoonSql.Demo.Models;
+namespace RaccoonSql.Core;
 
 
 public enum IndexType
