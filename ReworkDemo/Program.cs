@@ -28,17 +28,14 @@ var options = new ModelStoreOptions
 {
     DirectoryPath = "TestDB",
     FileSystem = new FileSystem(),
-};
+}.RegisterType<Raccoon>();
 var store = new ModelStore(options);
 
 // force loading
 {
     using var transaction = store.Transaction();
-
+    // ReSharper disable once UnusedVariable
     var raccoons = transaction.Set<Raccoon>();
-
-    raccoons.Add(raccoonFaker.Generate());
-
     transaction.Commit();
 }
 startUpWatch.Stop();
@@ -54,7 +51,7 @@ using (var transaction = store.Transaction())
     Console.WriteLine($"Loaded {raccoonCount} raccoons in {startUpWatch.Elapsed.Humanize()}");
 }
 
-var hundredThousandRaccoons = Enumerable.Range(0, 100_000)
+var hundredThousandRaccoons = Enumerable.Range(0, 1)
     .Select(_ => raccoonFaker.Generate())
     .ToList();
 var raccoonIds = hundredThousandRaccoons.Select(x => x.Id).ToList();
@@ -89,7 +86,7 @@ watch.Restart();
 watch.Stop();
 Console.WriteLine($"Aged 100.000 raccoons in a single transaction in {watch.Elapsed.Humanize()}");
 
-watch.Start();
+watch.Restart();
 {
     using var transaction = store.Transaction();
 
@@ -102,6 +99,8 @@ watch.Start();
 watch.Stop();
 Console.WriteLine($"Freed 100.000 raccoons in a single transaction in {watch.Elapsed.Humanize()}");
 
+
+return;
 var updateWatch = Stopwatch.StartNew();
 var deleteWatch = Stopwatch.StartNew();
 watch.Reset();

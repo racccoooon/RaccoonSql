@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using RaccoonSql.CoreRework.Internal.Persistence;
@@ -13,6 +12,8 @@ internal interface IModelCollection
     void Apply(ChangeSet changeSet);
 
     void ValidateCheckConstraints(ChangeSet changeSet);
+    
+    void Persist();
 }
 
 internal class ModelCollection<TModel> : IModelCollection
@@ -20,6 +21,8 @@ internal class ModelCollection<TModel> : IModelCollection
 {
     private readonly ModelStoreOptions _options;
     private readonly string _name;
+
+    private bool _isDirty;
 
     private readonly ModelCollectionMetadata _metadata;
 
@@ -44,7 +47,7 @@ internal class ModelCollection<TModel> : IModelCollection
     private ModelCollectionMetadata LoadMetadata()
     {
         const int initialChunkCount = 16;
-        var metadata = PersistenceEngine.Instance.ReadMetadata(
+        var metadata = PersistenceEngine.Instance.ReadCollectionMetadata(
             _options.FileSystem,
             _options.DirectoryPath, 
             _name);
@@ -57,7 +60,7 @@ internal class ModelCollection<TModel> : IModelCollection
                 ChunkCount = initialChunkCount,
             };
             
-            PersistenceEngine.Instance.WriteMetadata(
+            PersistenceEngine.Instance.WriteCollectionMetadata(
                 _options.FileSystem,
                 _options.DirectoryPath,
                 _name,
@@ -145,6 +148,17 @@ internal class ModelCollection<TModel> : IModelCollection
         }
     }
 
+    public void Persist()
+    {
+        if (!_isDirty) return;
+
+        for (var index = 0; index < _collectionChunks.Length; index++)
+        {
+            var chunk = _collectionChunks[index];
+            chunk.Persist(_options.FileSystem, _options.DirectoryPath, _name, index);
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ValidateCheckConstraints(ModelBase addedModel)
     {
@@ -203,26 +217,21 @@ internal class ModelCollection<TModel> : IModelCollection
 
     void IModelCollection.Apply(ChangeSet changeSet)
     {
-        HashSet<int> modifiedChunks = [];
-        
-        Dictionary<int, LinkedList<TModel>> chunkedAdds = [];
-        Dictionary<int, LinkedList<(TModel model, int index)>> chunkedUpdates = [];
-        Dictionary<int, LinkedList<int>> chunkedDeletes = [];
-
-        var isRehashed = false;
-
         foreach (var removedId in changeSet.Removed)
         {
             var chunkIndex = CalculateChunkIndex(removedId);
-            var modelIndex = _collectionChunks[chunkIndex].Remove(removedId);
-            modifiedChunks.Add(chunkIndex);
-            GetChunkChanges(chunkedDeletes, chunkIndex).AddLast(modelIndex);
+            _collectionChunks[chunkIndex].Remove(removedId);
         }
 
         if (EnsureCapacity(changeSet.Added.Count))
         {
             _metadata.ChunkCount = _collectionChunks.Length;
-            isRehashed = true;
+            
+            PersistenceEngine.Instance.WriteCollectionMetadata(
+                _options.FileSystem,
+                _options.DirectoryPath,
+                _name,
+                _metadata);
         }
 
         // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
@@ -230,13 +239,7 @@ internal class ModelCollection<TModel> : IModelCollection
         {
             var chunkIndex = CalculateChunkIndex(model.Id);
             var chunk = _collectionChunks[chunkIndex];
-            var modelIndex = chunk.ApplyChanges(model.Id, model.Changes);
-
-            if (isRehashed) continue;
-            
-            modifiedChunks.Add(chunkIndex);
-            Debug.Assert(chunk.ModelCount > modelIndex);
-            GetChunkChanges(chunkedUpdates, chunkIndex).AddLast((model, modelIndex));
+            chunk.ApplyChanges(model.Id, model.Changes);
         }
 
         // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
@@ -244,68 +247,9 @@ internal class ModelCollection<TModel> : IModelCollection
         {
             var chunkIndex = CalculateChunkIndex(model.Id);
             _collectionChunks[chunkIndex].Add(model);
-
-            if (isRehashed) continue;
-            
-            modifiedChunks.Add(chunkIndex);
-            GetChunkChanges(chunkedAdds, chunkIndex).AddLast(model);
         }
 
-        _modelCount += changeSet.Added.Count;
-
-        if (isRehashed)
-        {
-            PersistenceEngine.Instance.WriteMetadata(
-                _options.FileSystem,
-                _options.DirectoryPath,
-                _name,
-                _metadata);
-            
-            for (var i = 0; i < _collectionChunks.Length; i++)
-            {
-                modifiedChunks.Add(i);
-            }
-        }
-
-        foreach (var modifiedChunk in modifiedChunks)
-        {
-            var chunk = _collectionChunks[modifiedChunk];
-            if(isRehashed || chunk.OperationCount > 1000)
-            {
-                PersistenceEngine.Instance.WriteChunk(
-                    _options.FileSystem,
-                    _options.DirectoryPath,
-                    _name,
-                    modifiedChunk,
-                    chunk);
-                
-                chunk.OperationCount = 0;
-            }
-            else
-            {
-                PersistenceEngine.Instance.WriteChunkChanges(
-                    _options.FileSystem,
-                    _options.DirectoryPath,
-                    _name,
-                    modifiedChunk,
-                    GetChunkChanges(chunkedAdds, modifiedChunk),
-                    GetChunkChanges(chunkedUpdates, modifiedChunk),
-                    GetChunkChanges(chunkedDeletes, modifiedChunk));
-            }
-        }
-        
-        return;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        // ReSharper disable once SuggestBaseTypeForParameter
-        LinkedList<T> GetChunkChanges<T>(Dictionary<int, LinkedList<T>> dictionary, int chunkIndex)
-        {
-            if (!dictionary.TryGetValue(chunkIndex, out var result))
-            {
-                result = dictionary[chunkIndex] = [];
-            }
-
-            return result;
-        }
+        _modelCount += changeSet.Added.Count - changeSet.Removed.Count;
+        _isDirty = true;
     }
 }

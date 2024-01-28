@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Abstractions;
 using RaccoonSql.CoreRework.Internal.Persistence;
 using RaccoonSql.CoreRework.Internal.Utils;
 
@@ -9,14 +10,8 @@ internal class ModelCollectionChunk<TModel>()
 {
     private readonly List<TModel> _models = [];
     private readonly Dictionary<Guid, int> _modelIndexes = [];
-    private int _operationCount;
 
-    // ReSharper disable once ConvertToAutoPropertyWhenPossible
-    internal int OperationCount
-    {
-        get => _operationCount;
-        set => _operationCount = value;
-    }
+    private bool _isDirty;
 
     internal ModelCollectionChunk(ChunkData<TModel> data)
         : this()
@@ -37,7 +32,7 @@ internal class ModelCollectionChunk<TModel>()
     public IEnumerable<TModel> Models => _models;
     public int ModelCount => _models.Count;
 
-    public int Remove(Guid id)
+    public void Remove(Guid id)
     {
         var modelIndex = _modelIndexes[id];
         var lastIndex = _models.Count - 1;
@@ -52,9 +47,7 @@ internal class ModelCollectionChunk<TModel>()
 
         _models.RemoveAt(lastIndex);
         _modelIndexes.Remove(id);
-        _operationCount++;
-
-        return modelIndex;
+        _isDirty = true;
     }
 
     public TModel? Find(Guid id)
@@ -67,13 +60,12 @@ internal class ModelCollectionChunk<TModel>()
         return proxy;
     }
 
-    public int ApplyChanges(Guid id, Dictionary<string, object?> modelChanges)
+    public void ApplyChanges(Guid id, Dictionary<string, object?> modelChanges)
     {
         var modelIndex = _modelIndexes[id];
         var model = _models[modelIndex];
         AutoMapper.ApplyChanges(model, modelChanges);
-        _operationCount++;
-        return modelIndex;
+        _isDirty = true;
     }
 
     public void Add(TModel model)
@@ -81,26 +73,12 @@ internal class ModelCollectionChunk<TModel>()
         _modelIndexes[model.Id] = _models.Count;
         var clone = AutoMapper.Clone(model);
         _models.Add(clone);
-        _operationCount++;
+        _isDirty = true;
     }
 
-    internal void Set(TModel? model, int index)
+    public void Persist(IFileSystem fileSystem, string rootPath, string collectionName, int chunkIndex)
     {
-        if (index == -1)
-        {
-            _models.Add(model!);
-            return;
-        }
-
-        if (model is null)
-        {
-            var lastIndex = _models.Count - 1;
-            (_models[lastIndex], _models[index]) = (_models[index], _models[lastIndex]);
-            _models.RemoveAt(lastIndex);
-        }
-        else
-        {
-            _models[index] = model;
-        }
+        if (!_isDirty) return;
+        PersistenceEngine.Instance.WriteChunk(fileSystem, rootPath, collectionName, chunkIndex, this);
     }
 }

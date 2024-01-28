@@ -1,6 +1,6 @@
 using MemoryPack;
 
-namespace RaccoonSql.CoreRework.Internal; 
+namespace RaccoonSql.CoreRework.Internal.Persistence; 
 
 [MemoryPackable]
 public partial class ModelCollectionMetadata
