@@ -6,14 +6,11 @@ using RaccoonSql.CoreRework.Querying;
 
 namespace RaccoonSql.CoreRework.Indexes;
 
-public class BTreeIndex : IIndex
+public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
 {
+    public override bool SupportsOrderedScan => true;
 
-    public bool SupportsOrderedScan => true;
-
-    private PropertyInfo Property { get; }
-
-    public bool TryConvertExpression(Expression expression, ParameterExpression modelParam, [NotNullWhen(true)] out IndexQueryExpression? result)
+    public override bool TryConvertExpression(Expression expression, ParameterExpression modelParam, [NotNullWhen(true)] out IndexQueryExpression? result)
     {
         if (expression is not BinaryExpression binaryExpression)
         {
@@ -36,7 +33,7 @@ public class BTreeIndex : IIndex
                 field = QueryExpressionModelField.FromExpression(l, modelParam);
                 break;
         }
-        if (field is null || value is null || !field.PropertyInfo.Equals(Property))
+        if (field is null || value is null || !field.PropertyInfo.Equals(PropertyInfo))
         {
             result = null;
             return false;
@@ -133,7 +130,7 @@ public class BTreeIndex : IIndex
         return false;
     }
 
-    public IEnumerable<ModelBase> Scan(List<IndexQueryExpression> queries, IndexScanOrder? order)
+    public override IEnumerable<ModelBase> Scan(List<IndexQueryExpression> queries, IndexScanOrder? order)
     {
         throw new NotImplementedException();
     }

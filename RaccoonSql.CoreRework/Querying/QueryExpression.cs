@@ -327,13 +327,13 @@ public abstract class QueryExpression : IEquatable<QueryExpression>
         }
     }
 
-    public static QueryExpression FromPredicateExpression<TModel>(Expression<Func<TModel, bool>> expression, List<IIndex> indices)
+    public static QueryExpression FromPredicateExpression<TModel>(Expression<Func<TModel, bool>> expression, List<IndexBase> indices)
     {
         return ConvertExpression(ExpressionUtils.ExecutePartially(expression.Body), expression.Parameters[0], indices)
             .Normalize();
     }
 
-    private static QueryExpression ConvertExpression(Expression expression, ParameterExpression modelParam, List<IIndex> indices)
+    private static QueryExpression ConvertExpression(Expression expression, ParameterExpression modelParam, List<IndexBase> indices)
     {
         foreach (var index in indices)
         {

@@ -1,21 +1,37 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
+using System.Reflection;
+using JetBrains.Annotations;
 using RaccoonSql.CoreRework.Querying;
 
 namespace RaccoonSql.CoreRework.Indexes;
 
+[PublicAPI]
 public enum IndexScanOrder
 {
     Ascending,
     Descending,
 }
 
+[PublicAPI]
 public class IndexDoesNotSupportOrderedScan : Exception;
 
-public interface IIndex
+/// <summary>
+/// The base class for indexes.
+/// </summary>
+/// <remarks>An index class must have a public constructor with exactly one <see cref="PropertyInfo"/> as its parameter.</remarks>
+/// <param name="propertyInfo"></param>
+[PublicAPI]
+public abstract class IndexBase(PropertyInfo propertyInfo)
 {
-    public bool SupportsOrderedScan { get; }
-    public bool TryConvertExpression(Expression expression, ParameterExpression modelParam, [NotNullWhen(true)] out IndexQueryExpression? result);
+    protected readonly PropertyInfo PropertyInfo = propertyInfo;
+
+    public abstract bool SupportsOrderedScan { get; }
+
+    public abstract bool TryConvertExpression(
+        Expression expression,
+        ParameterExpression modelParam,
+        [NotNullWhen(true)] out IndexQueryExpression? result);
 
     /// <summary>
     /// Scan the index according to the given queries, and optionally in the given order.
@@ -24,27 +40,28 @@ public interface IIndex
     /// <param name="order">The order to scan the index by</param>
     /// <exception cref="IndexDoesNotSupportOrderedScan"> If <see cref="order"/> is not <see langword="null" /> and this index does not support ordered scan</exception>
     /// <returns>The results of the scan</returns>
-    public IEnumerable<ModelBase> Scan(List<IndexQueryExpression> query, IndexScanOrder? order);
+    public abstract IEnumerable<ModelBase> Scan(
+        List<IndexQueryExpression> query,
+        IndexScanOrder? order);
 }
 
-
 /// <summary>
-/// A <see cref="QueryExpression"/> node that supports an operation on an <see cref="IIndex"/>. 
+/// A <see cref="QueryExpression"/> node that supports an operation on an <see cref="IndexBase"/>. 
 /// </summary>
 public abstract class IndexQueryExpression : QueryExpression
 {
     public required QueryExpressionModelField Field { get; init; }
-    
+
     /// <summary>
     /// <see langword="true" /> if this node is trivially true and can be optimised away
     /// </summary>
     public abstract bool IsTriviallyTrue { get; }
-    
+
     /// <summary>
     /// <see langword="true" /> if this node is trivially false and can be optimised away
     /// </summary>
     public abstract bool IsTriviallyFalse { get; }
-    
+
     /// <summary>
     /// Tries to calculate the intersection with another <see cref="IndexQueryExpression"/>
     /// </summary>
@@ -52,7 +69,9 @@ public abstract class IndexQueryExpression : QueryExpression
     /// <param name="result">The resulting intersection, or <see langword="null" /> if no there is no intersection</param>
     /// <returns><see langword="true" />if the intersection is not empty, <see langword="false" /> if it is empty</returns>
     /// <exception cref="InvalidOperationException">if the other parameter is of a different index type or has a different field</exception>
-    public abstract bool TryIntersect(IndexQueryExpression other, [NotNullWhen(true)] out QueryExpression? result);
+    public abstract bool TryIntersect(
+        IndexQueryExpression other,
+        [NotNullWhen(true)] out QueryExpression? result);
 
     /// <summary>
     /// Tries to calculate the union with another <see cref="IndexQueryExpression"/>
@@ -61,7 +80,9 @@ public abstract class IndexQueryExpression : QueryExpression
     /// <param name="result">The resulting union, or <see langword="null" /> if the union is empty</param>
     /// <returns><see langword="true" />if the union is not empty, <see langword="false" /> if it is empty</returns>
     /// <exception cref="InvalidOperationException">if the other parameter is of a different index type or has a different field</exception>
-    public abstract bool TryUnion(IndexQueryExpression other, [NotNullWhen(true)] out QueryExpression? result);
+    public abstract bool TryUnion(
+        IndexQueryExpression other,
+        [NotNullWhen(true)] out QueryExpression? result);
 
 
     /// <summary>
