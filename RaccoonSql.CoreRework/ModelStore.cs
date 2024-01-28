@@ -138,14 +138,16 @@ public sealed class ModelStore : IModelStore, IDisposable
 
         try
         {
-            var commit = new CommitChanges
-            {
-                Version = _versionId++,
-                Changes = changes,
-            };
-
+            CommitChanges commit;
             lock (_walLock)
             {
+                commit = new CommitChanges
+                {
+                    Version = _versionId++,
+                    Changes = changes,
+                };
+                _pendingTransactionCount++;
+                
                 PersistenceEngine.Instance.WriteWal(
                     _options.FileSystem,
                     _options.DirectoryPath,
@@ -157,6 +159,11 @@ public sealed class ModelStore : IModelStore, IDisposable
         finally
         {
             ReleaseCommitLock(changes);
+        }
+
+        if (_pendingTransactionCount > 8)
+        {
+            Persist();
         }
     }
 
