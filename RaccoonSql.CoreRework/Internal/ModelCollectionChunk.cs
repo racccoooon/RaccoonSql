@@ -37,6 +37,26 @@ internal class ModelCollectionChunk<TModel>()
     public IEnumerable<TModel> Models => _models;
     public int ModelCount => _models.Count;
 
+    public int Remove(Guid id)
+    {
+        var modelIndex = _modelIndexes[id];
+        var lastIndex = _models.Count - 1;
+        Debug.Assert(modelIndex <= lastIndex);
+        
+        if (modelIndex != lastIndex)
+        {
+            var lastIndexGuid = _models[lastIndex].Id;
+            (_models[modelIndex], _models[lastIndex]) = (_models[lastIndex], _models[modelIndex]);
+            _modelIndexes[lastIndexGuid] = modelIndex;
+        }
+
+        _models.RemoveAt(lastIndex);
+        _modelIndexes.Remove(id);
+        _operationCount++;
+
+        return modelIndex;
+    }
+
     public TModel? Find(Guid id)
     {
         if (!_modelIndexes.TryGetValue(id, out var modelIndex))
@@ -47,24 +67,6 @@ internal class ModelCollectionChunk<TModel>()
         return proxy;
     }
 
-    public int Remove(Guid id)
-    {
-        var modelIndex = _modelIndexes[id];
-
-        var lastIndex = _models.Count - 1;
-        Debug.Assert(modelIndex <= lastIndex);
-        if (modelIndex != lastIndex)
-        {
-            (_models[modelIndex], _models[lastIndex]) = (_models[lastIndex], _models[modelIndex]);
-        }
-
-        _models.RemoveAt(lastIndex);
-        _modelIndexes.Remove(id);
-        _operationCount++;
-
-        return modelIndex;
-    }
-    
     public int ApplyChanges(Guid id, Dictionary<string, object?> modelChanges)
     {
         var modelIndex = _modelIndexes[id];
