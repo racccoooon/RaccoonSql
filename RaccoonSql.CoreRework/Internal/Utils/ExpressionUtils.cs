@@ -50,22 +50,16 @@ public static class ExpressionUtils
         }
     }
 
-    public static Expression<T> RenameParams<T>(Expression<T> expr, Dictionary<ParameterExpression, string> newNames)
+    public static Expression<T> ReplaceParams<T>(Expression<T> expression, Dictionary<ParameterExpression, ParameterExpression> replacements)
     {
-        var newParams = newNames
-            .Select(x =>
-                new KeyValuePair<ParameterExpression, ParameterExpression>(x.Key,
-                    Expression.Parameter(x.Key.Type, x.Value)))
-            .ToDictionary();
-        
         return (Expression<T>)Expression.Lambda(
-            new ParameterRenameVisitor(newParams).VisitAndConvert(expr.Body, null),
-            expr.Parameters
-                .Select(x => newParams.GetValueOrDefault(x, x))
+            new ReplaceParameterVisitor(replacements).VisitAndConvert(expression.Body, null),
+            expression.Parameters
+                .Select(x => replacements.GetValueOrDefault(x, x))
                 .ToList());
     }
 
-    private class ParameterRenameVisitor(IReadOnlyDictionary<ParameterExpression, ParameterExpression> newNames)
+    private class ReplaceParameterVisitor(IReadOnlyDictionary<ParameterExpression, ParameterExpression> newNames)
         : ExpressionVisitor
     {
         protected override Expression VisitParameter(ParameterExpression node)
