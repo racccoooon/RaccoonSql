@@ -34,10 +34,27 @@ var store = new ModelStore(options);
 // force loading
 {
     using var transaction = store.Transaction();
-    // ReSharper disable once UnusedVariable
+    transaction.Set<Raccoon>().Query()
+        .Where(r => (r.CutenessLevel >= 100 && r.CutenessLevel < 200) || (r.CutenessLevel >= 150))
+        .Where(r => r.CutenessLevel < 200)
+        .Where(r => r.Floofines > 1)
+        .Where(r => r.Gender != "male" || r.Gender != null)
+        .Where(r => !(r.Age == 10 || r.Gender == "none of your business"))
+        .Get();
+    transaction.Set<Raccoon>().Query()
+        .Where(r => (r.CutenessLevel > 100 || true) && (r.FirstName == null || r.FirstName != null) && !(r.CutenessLevel == 1 || r.LastName.StartsWith("Rac")))
+        .Get();
+    transaction.Set<Raccoon>().Query()
+        .Where(r => (r.CutenessLevel > 100 || r.CutenessLevel > 100 || r.CutenessLevel < 200) && (r.CutenessLevel == 1 || r.LastName.StartsWith("Rac")))
+        .Get();
+
+    
+    
     var raccoons = transaction.Set<Raccoon>();
+
     transaction.Commit();
 }
+
 startUpWatch.Stop();
 using (var transaction = store.Transaction())
 {
@@ -176,7 +193,7 @@ Guid raccoonId;
 
 {
     using var transaction = store.Transaction();
-    
+
     var raccoons = transaction.Set<Raccoon>();
     var raccoon = raccoons.Find(raccoonId);
     Debug.Assert(raccoon != null);
@@ -184,31 +201,45 @@ Guid raccoonId;
     Debug.Assert(raccoon.CutenessLevel == 150);
 
     raccoon.CutenessLevel = 160;
-    
+
     transaction.Commit();
 }
 
 {
     using var transaction = store.Transaction();
-    
+
     var raccoons = transaction.Set<Raccoon>();
     var raccoon = raccoons.Find(raccoonId);
     Debug.Assert(raccoon != null);
     Debug.Assert(raccoon.CutenessLevel == 160);
 
     raccoons.Remove(raccoon);
-    
+
     transaction.Commit();
 }
 
 {
     using var transaction = store.Transaction();
-    
+
     var raccoons = transaction.Set<Raccoon>();
     var raccoon = raccoons.Find(raccoonId);
     Debug.Assert(raccoon == null);
 }
 
+/*
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property, AllowMultiple = true)]
+public class IndexAttribute : Attribute
+{
+    public IndexAttribute(string path, [CallerArgumentExpression(nameof(path))] string fullPath = default!)
+    {
+        Console.WriteLine(fullPath);
+    }
+    
+    public string Type { get; set; }
+    public Type CustomType { get; set; }
+}
+
+[Index(nameof(Trashcan.Number), Type = "Custom", CustomType = typeof(MyCustomIndexClass))]*/
 public class Raccoon : ModelBase
 {
     public virtual required string FirstName { get; set; }

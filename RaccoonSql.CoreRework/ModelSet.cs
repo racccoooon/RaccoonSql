@@ -67,7 +67,14 @@ public interface IModelSet<TModel>
     /// The change tracker for this set in the current transaction.
     /// </summary>
     ChangeTracker<TModel> ChangeTracker { get; }
+
+    IQuery<TModel> Query();
 }
+
+public sealed class QuerySelectResult<TModel> {}
+public sealed class QueryDeleteResult<TModel> {}
+public sealed class QueryUpdateResult<TModel> {}
+
 
 public sealed class ModelSet<TModel> : IModelSet<TModel>, IModelSet
     where TModel : ModelBase
@@ -77,6 +84,10 @@ public sealed class ModelSet<TModel> : IModelSet<TModel>, IModelSet
     private readonly Transaction _transaction;
 
     public ChangeTracker<TModel> ChangeTracker { get; } = new();
+    public IQuery<TModel> Query()
+    {
+        return new Query<TModel>();
+    }
 
     internal ModelSet(ModelCollection<TModel> modelCollection, Transaction transaction)
     {
