@@ -52,16 +52,9 @@ public abstract class IndexQueryExpression : QueryExpression
 {
     public required QueryExpressionModelField Field { get; init; }
 
-    /// <summary>
-    /// <see langword="true" /> if this node is trivially true and can be optimised away
-    /// </summary>
-    public abstract bool IsTriviallyTrue { get; }
 
-    /// <summary>
-    /// <see langword="true" /> if this node is trivially false and can be optimised away
-    /// </summary>
-    public abstract bool IsTriviallyFalse { get; }
-
+    public abstract bool TrySimplify([NotNullWhen(true)] out QueryExpression? result);
+    
     /// <summary>
     /// Tries to calculate the intersection with another <see cref="IndexQueryExpression"/>
     /// </summary>

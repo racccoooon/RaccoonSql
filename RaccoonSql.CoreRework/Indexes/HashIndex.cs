@@ -73,10 +73,13 @@ public class HashIndexEquality : IndexQueryExpression
         return Value == otherEquality.Value;
     }
 
-    public override bool IsTriviallyTrue => false;
-    
-    public override bool IsTriviallyFalse => false;
-    
+    public override bool TrySimplify([NotNullWhen(true)] out QueryExpression? result)
+    {
+        // TODO: if the hash index knows about whether the data type is null then it can check for that and simplify accordingly
+        result = null;
+        return false;
+    }
+
     public override bool TryIntersect(
         IndexQueryExpression other,
         [NotNullWhen(true)] out QueryExpression? result)

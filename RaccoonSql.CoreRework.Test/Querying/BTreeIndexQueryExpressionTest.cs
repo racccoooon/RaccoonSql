@@ -9,8 +9,7 @@ public class BTreeIndexQueryExpressionTest
 {
     public int FakeProp { get; set; }
 
-
-    private static QueryExpression ParseExpressionString(string input)
+    private static QueryExpression ParseExpressionString(string input, bool nullable)
     {
         var field = new QueryExpressionModelField
         {
@@ -19,73 +18,102 @@ public class BTreeIndexQueryExpressionTest
 
         var inputs = input.Split(';');
 
-        List<IndexQueryExpression> queries = new(inputs.Length);
+        List<QueryExpression> queries = new(inputs.Length);
 
         foreach (var s in inputs)
         {
-            if ("[(,)]".Any(c => s.Contains(c)))
+            switch (s)
             {
-                Debug.Assert(s.Length >= 5);
-                Debug.Assert(s[0] == '[' || s[0] == '(');
-                Debug.Assert(s[^1] == ']' || s[^1] == ')');
-
-                var commaPos = s.IndexOf(',');
-                Debug.Assert(commaPos > 1 && commaPos < s.Length - 2);
-                int? from, to;
-
-                if (s[1] == '_')
+                case "":
+                    queries.Add(QueryExpression.Box.True());
+                    break;
+                case "!":
+                    queries.Add(QueryExpression.Box.False());
+                    break;
+                case "_":
+                    queries.Add(new BTreeIndexEquality(nullable)
+                    {
+                        Field = field,
+                        Inverted = false,
+                        Value = null,
+                    });
+                    break;
+                case "!_":
+                    queries.Add(new BTreeIndexEquality(nullable)
+                    {
+                        Field = field,
+                        Inverted = true,
+                        Value = null,
+                    });
+                    break;
+                default:
                 {
-                    from = null;
-                    Debug.Assert(commaPos == 2);
+                    if ("[(,)]".Any(c => s.Contains(c)))
+                    {
+                        Debug.Assert(s.Length >= 5);
+                        Debug.Assert(s[0] == '[' || s[0] == '(');
+                        Debug.Assert(s[^1] == ']' || s[^1] == ')');
+
+                        var commaPos = s.IndexOf(',');
+                        Debug.Assert(commaPos > 1 && commaPos < s.Length - 2);
+                        int? from, to;
+
+                        if (s[1] == '_')
+                        {
+                            from = null;
+                            Debug.Assert(commaPos == 2);
+                        }
+                        else
+                        {
+                            from = Convert.ToInt32(s.Substring(1, commaPos - 1));
+                        }
+
+                        var fromInclusive = from is not null && s[0] == '[';
+
+                        if (s[commaPos + 1] == '_')
+                        {
+                            to = null;
+                            Debug.Assert(s.Length == commaPos + 3);
+                        }
+                        else
+                        {
+                            to = Convert.ToInt32(s[(commaPos + 1)..^1]);
+                        }
+
+                        var toInclusive = to is not null && s[^1] == ']';
+
+                        if (from is not null && to is not null)
+                        {
+                            Debug.Assert(to >= from);
+                        }
+
+                        queries.Add(new BTreeIndexRange(nullable)
+                        {
+                            Field = field,
+                            From = from,
+                            To = to,
+                            FromInclusive = fromInclusive,
+                            ToInclusive = toInclusive,
+                        });
+                    }
+                    else
+                    {
+                        Debug.Assert(s.Length >= 1);
+                        bool invert = false;
+                        if (s[0] == '!')
+                        {
+                            Debug.Assert(s.Length >= 2);
+                            invert = true;
+                        }
+                        queries.Add(new BTreeIndexEquality(nullable)
+                        {
+                            Field = field,
+                            Inverted = invert,
+                            Value = Convert.ToInt32(invert ? s[1..] : s),
+                        });
+                    }
+                    break;
                 }
-                else
-                {
-                    from = Convert.ToInt32(s.Substring(1, commaPos - 1));
-                }
-
-                var fromInclusive = from is not null && s[0] == '[';
-
-                if (s[commaPos + 1] == '_')
-                {
-                    to = null;
-                    Debug.Assert(s.Length == commaPos + 3);
-                }
-                else
-                {
-                    to = Convert.ToInt32(s[(commaPos + 1)..^1]);
-                }
-
-                var toInclusive = to is not null && s[^1] == ']';
-
-                if (from is not null && to is not null)
-                {
-                    Debug.Assert(to >= from);
-                }
-
-                queries.Add(new BTreeIndexRange()
-                {
-                    Field = field,
-                    From = from,
-                    To = to,
-                    FromInclusive = fromInclusive,
-                    ToInclusive = toInclusive,
-                });
-            }
-            else
-            {
-                Debug.Assert(s.Length >= 1);
-                bool invert = false;
-                if (s[0] == '!')
-                {
-                    Debug.Assert(s.Length >= 2);
-                    invert = true;
-                }
-                queries.Add(new BTreeIndexEquality
-                {
-                    Field = field,
-                    Inverted = invert,
-                    Value = Convert.ToInt32(invert ? s[1..] : s),
-                });
             }
         }
 
@@ -100,7 +128,26 @@ public class BTreeIndexQueryExpressionTest
 
     }
 
-    public static IEnumerable<object[]> GetCases()
+    public static IEnumerable<object[]> GetCasesNullable()
+    {
+        foreach (var objects in GetCases())
+        {
+            var comment = objects[0] as string;
+            yield return [$"[nullable] {comment}", true, ..objects[1..]];
+        }
+    }
+    public static IEnumerable<object[]> GetCasesNotNullable()
+    {
+        foreach (var objects in GetCases())
+        {
+            var comment = objects[0] as string;
+            yield return [$"[not nullable] {comment}", false, ..objects[1..]];
+        }
+    }
+    
+    
+    
+    private static IEnumerable<object[]> GetCases()
     {
         var comment = "overlap, no nulls";
         yield return [comment, "(10,30]", "[20,40)", "[20,30]", "(10,40)"];
@@ -310,13 +357,13 @@ public class BTreeIndexQueryExpressionTest
         yield return [comment, "[20,40)", "(40,_)", null, null];
         yield return [comment, "[20,40)", "[40,_)", null, null];
         yield return [comment, "[20,40]", "(40,_)", null, null];
-        
+
         comment = "(in)equality nodes, same value";
         yield return [comment, "20", "20", "20", "20"];
         yield return [comment, "20", "!20", null, "(_,_)"];
         yield return [comment, "!20", "20", null, "(_,_)"];
         yield return [comment, "!20", "!20", "!20", "!20"];
-        
+
         comment = "(in)equality nodes, null";
         yield return [comment, "_", "_", "_", "_"];
         yield return [comment, "_", "!_", null, ""];
@@ -375,20 +422,43 @@ public class BTreeIndexQueryExpressionTest
         yield return [comment, "(10,50]", "!70", "(10,50]", "!70"];
         yield return [comment, "[10,50]", "!70", "[10,50]", "!70"];
 
+        comment = "null equality and range";
+        yield return [comment, "(10,50)", "_", null, null];
+        yield return [comment, "(10,50]", "_", null, null];
+        yield return [comment, "[10,50)", "_", null, null];
+        yield return [comment, "[10,50]", "_", null, null];
+        yield return [comment, "(10,_)", "_", null, null];
+        yield return [comment, "[10,_)", "_", null, null];
+        yield return [comment, "(_,10)", "_", null, null];
+        yield return [comment, "(_,10]", "_", null, null];
+        yield return [comment, "(_,_)", "_", null, null];
+        
+        comment = "null inequality and range";
+        yield return [comment, "(10,50)", "!_", "(10,50)", "!_"];
+        yield return [comment, "(10,50]", "!_", "(10,50]", "!_"];
+        yield return [comment, "[10,50)", "!_", "[10,50)", "!_"];
+        yield return [comment, "[10,50]", "!_", "[10,50]", "!_"];
+        yield return [comment, "(10,_)", "!_", "(10,_)", "!_"];
+        yield return [comment, "[10,_)", "!_", "[10,_)", "!_"];
+        yield return [comment, "(_,10)", "!_", "(_,10)", "!_"];
+        yield return [comment, "(_,10]", "!_", "(_,10]", "!_"];
+        yield return [comment, "(_,_)", "!_", "(_,_)", "!_"];
+
     }
 
     [Theory]
-    [MemberData(nameof(GetCases))]
-    public void Intersect(string comment, string q1, string q2, string? intersectionStr, string? unionStr)
+    [MemberData(nameof(GetCasesNullable))]
+    [MemberData(nameof(GetCasesNotNullable))]
+    public void Intersect(string comment, bool nullable, string q1, string q2, string? intersectionStr, string? unionStr)
     {
         // arrange 
-        
-        var query1 = ParseExpressionString(q1);
+
+        var query1 = ParseExpressionString(q1, nullable);
         Debug.Assert(query1 is IndexQueryExpression);
-        var query2 = ParseExpressionString(q2);
+        var query2 = ParseExpressionString(q2, nullable);
         Debug.Assert(query2 is IndexQueryExpression);
         var success = intersectionStr != null;
-        var expectedIntersection = intersectionStr == null ? null : ParseExpressionString(intersectionStr).Normalize();
+        var expectedIntersection = intersectionStr == null ? null : ParseExpressionString(intersectionStr, nullable).Normalize();
 
         // act
 
@@ -406,17 +476,18 @@ public class BTreeIndexQueryExpressionTest
     }
 
     [Theory]
-    [MemberData(nameof(GetCases))]
-    public void Union(string comment, string q1, string q2, string? intersectionStr, string? unionStr)
+    [MemberData(nameof(GetCasesNullable))]
+    [MemberData(nameof(GetCasesNotNullable))]
+    public void Union(string comment,bool nullable, string q1, string q2, string? intersectionStr, string? unionStr)
     {
         // arrange 
 
-        var query1 = ParseExpressionString(q1);
+        var query1 = ParseExpressionString(q1, nullable);
         Debug.Assert(query1 is IndexQueryExpression);
-        var query2 = ParseExpressionString(q2);
+        var query2 = ParseExpressionString(q2, nullable);
         Debug.Assert(query2 is IndexQueryExpression);
         var success = unionStr != null;
-        var expectedUnion = unionStr == null ? null : ParseExpressionString(unionStr).Normalize();
+        var expectedUnion = unionStr == null ? null : ParseExpressionString(unionStr, nullable).Normalize();
 
         // act
 

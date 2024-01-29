@@ -10,6 +10,8 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
 {
     public override bool SupportsOrderedScan => true;
 
+    private bool Nullable { get; }
+    
     public override bool TryConvertExpression(Expression expression, ParameterExpression modelParam, [NotNullWhen(true)] out IndexQueryExpression? result)
     {
         if (expression is not BinaryExpression binaryExpression)
@@ -44,7 +46,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
             switch (binaryExpression.NodeType)
             {
                 case ExpressionType.Equal:
-                    result = new BTreeIndexEquality()
+                    result = new BTreeIndexEquality(Nullable)
                     {
                         Field = field,
                         Inverted = false,
@@ -52,7 +54,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
                     };
                     return true;
                 case ExpressionType.NotEqual:
-                    result = new BTreeIndexEquality()
+                    result = new BTreeIndexEquality(Nullable)
                     {
                         Field = field,
                         Inverted = true,
@@ -65,7 +67,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
         switch (binaryExpression.NodeType)
         {
             case ExpressionType.Equal:
-                result = new BTreeIndexEquality()
+                result = new BTreeIndexEquality(Nullable)
                 {
                     Value = (IComparable)value.Value!,
                     Inverted = false,
@@ -73,7 +75,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
                 };
                 return true;
             case ExpressionType.NotEqual:
-                result = new BTreeIndexEquality()
+                result = new BTreeIndexEquality(Nullable)
                 {
                     Value = (IComparable)value.Value!,
                     Inverted = true,
@@ -82,7 +84,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
                 return true;
             case ExpressionType.GreaterThan when !mirrored:
             case ExpressionType.LessThan when mirrored:
-                result = new BTreeIndexRange()
+                result = new BTreeIndexRange(Nullable)
                 {
                     From = (IComparable)value.Value!,
                     To = null,
@@ -93,7 +95,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
                 return true;
             case ExpressionType.GreaterThanOrEqual when !mirrored:
             case ExpressionType.LessThanOrEqual when mirrored:
-                result = new BTreeIndexRange
+                result = new BTreeIndexRange(Nullable)
                 {
                     From = (IComparable)value.Value!,
                     To = null,
@@ -104,7 +106,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
                 return true;
             case ExpressionType.LessThan when !mirrored:
             case ExpressionType.GreaterThan when mirrored:
-                result = new BTreeIndexRange
+                result = new BTreeIndexRange(Nullable)
                 {
                     From = null,
                     To = (IComparable)value.Value!,
@@ -115,7 +117,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
                 return true;
             case ExpressionType.LessThanOrEqual when !mirrored:
             case ExpressionType.GreaterThanOrEqual when mirrored:
-                result = new BTreeIndexRange
+                result = new BTreeIndexRange(Nullable)
                 {
                     From = null,
                     To = (IComparable)value.Value!,
@@ -136,7 +138,7 @@ public class BTreeIndex(PropertyInfo propertyInfo) : IndexBase(propertyInfo)
     }
 }
 
-public class BTreeIndexEquality : IndexQueryExpression
+public class BTreeIndexEquality(bool nullable) : IndexQueryExpression
 {
 
     public required bool Inverted { get; init; }
@@ -151,116 +153,106 @@ public class BTreeIndexEquality : IndexQueryExpression
         return Value.CompareTo(otherEquality.Value) == 0;
     }
 
-    public override bool IsTriviallyTrue => false;
-    public override bool IsTriviallyFalse => false;
-
-    private static bool TryUnion(BTreeIndexEquality a, BTreeIndexEquality b, [NotNullWhen(true)] out QueryExpression? result)
+    public override bool TryUnion(IndexQueryExpression other, [NotNullWhen(true)] out QueryExpression? result)
     {
-        switch (a.Value, b.Value)
+        if (other is BTreeIndexRange otherRange)
         {
-            case (null, null) when a.Inverted == b.Inverted:
-                result = a;
+            return otherRange.TryUnion(this, out result);
+        }
+
+        if (other is not BTreeIndexEquality otherEquality) throw new ArgumentException(null, nameof(other));
+
+        switch (Value, otherEquality.Value)
+        {
+            case (null, null) when Inverted == otherEquality.Inverted:
+                result = this;
                 return true;
             case (null, null):
                 result = Box.True();
                 return true;
-            case (null, _) when a.Inverted:
-                result = b;
+            case (null, not null) when Inverted:
+                result = this;
                 return true;
-            case (_, null) when b.Inverted:
-                result = a;
+            case (not null, null) when otherEquality.Inverted:
+                result = otherEquality;
                 return true;
-            case (_, null):
-            case (null, _):
+            case (not null, null):
+            case (null, not null):
                 result = null;
                 return false;
         }
 
-        var cmp = a.Value.CompareTo(b.Value);
+        var cmp = Value.CompareTo(otherEquality.Value);
 
-        switch (cmp, a.Inverted, b.Inverted)
+        switch (cmp, Inverted, otherEquality.Inverted)
         {
             case (0, true, true):
             case (0, false, false):
-                result = a;
+            case (not 0, true, false):
+                result = this;
+                return true;
+            case (not 0, false, true):
+                result = otherEquality;
                 return true;
             case (0, _, _):
-                result = Box.True();
+            case (not 0, true, true):
+                result = new BTreeIndexRange(nullable)
+                {
+                    Field = Field,
+                    From = null,
+                    To = null,
+                    FromInclusive = false,
+                    ToInclusive = false,
+                };
                 return true;
-            case (_, false, false):
+            case (not 0, false, false):
                 result = null;
                 return false;
-            case (_, false, true):
-                result = b;
-                return true;
-            case (_, true, false):
-                result = a;
-                return true;
-            case (_, true, true):
-                result = Box.True();
-                return true;
         }
+
     }
 
-    public override bool TryUnion(IndexQueryExpression other, [NotNullWhen(true)] out QueryExpression? result)
+    public override bool TryIntersect(IndexQueryExpression other, [NotNullWhen(true)] out QueryExpression? result)
     {
-        switch (other)
+        if (other is BTreeIndexRange otherRange)
         {
-            case BTreeIndexRange otherRange:
-                return otherRange.TryUnion(this, out result);
-            case BTreeIndexEquality otherEquality when TryUnion(this, otherEquality, out var res):
-                result = res.Normalize();
-                return true;
-            default:
-                result = null;
-                return false;
+            return otherRange.TryIntersect(this, out result);
         }
 
-    }
-
-    private static bool TryIntersect(BTreeIndexEquality a, BTreeIndexEquality b, [NotNullWhen(true)] out QueryExpression? result)
-    {
-        switch (a.Value, b.Value)
+        if (other is not BTreeIndexEquality otherEquality) throw new ArgumentException(null, nameof(other));
+        switch (Value, otherEquality.Value)
         {
             case (null, null):
-                if (a.Inverted == b.Inverted)
+                if (Inverted == otherEquality.Inverted)
                 {
-                    result = a;
+                    result = this;
                     return true;
                 }
                 result = null;
                 return false;
-
-            case (null, _):
-                switch (a.Inverted, b.Inverted)
+            case (null, not null):
+                switch (Inverted, otherEquality.Inverted)
                 {
-                    case (false, false):
+                    case (false, _):
                         result = null;
                         return false;
-                    case (false, true):
-                        result = a;
-                        return true;
                     case (true, _):
-                        result = b;
+                        result = otherEquality;
                         return true;
                 }
-            case (_, null):
-                switch (a.Inverted, b.Inverted)
+            case (not null, null):
+                switch (Inverted, otherEquality.Inverted)
                 {
-                    case (false, false):
+                    case (_, false):
                         result = null;
                         return false;
-                    case (true, false):
-                        result = b;
-                        return true;
                     case (_, true):
-                        result = a;
+                        result = this;
                         return true;
                 }
             case var (aVal, bVal):
                 var cmp = aVal.CompareTo(bVal);
-
-                switch (cmp, a.Inverted, b.Inverted)
+                switch (cmp, Inverted, otherEquality.Inverted)
                 {
                     case (0, true, false):
                     case (0, false, true):
@@ -268,43 +260,43 @@ public class BTreeIndexEquality : IndexQueryExpression
                         return false;
                     case (0, true, true):
                     case (0, false, false):
-                        result = a;
+                        result = this;
                         return true;
 
                     case (_, false, false):
                         result = null;
                         return false;
                     case (_, false, true):
-                        result = a;
+                        result = this;
                         return true;
                     case (_, true, false):
-                        result = b;
+                        result = otherEquality;
                         return true;
                     case (< 0, true, true):
                         result = new Or
                         {
                             Terms =
                             [
-                                new BTreeIndexRange
+                                new BTreeIndexRange(nullable)
                                 {
-                                    Field = a.Field,
+                                    Field = Field,
                                     From = null,
                                     FromInclusive = false,
-                                    To = a.Value,
+                                    To = Value,
                                     ToInclusive = false,
                                 },
-                                new BTreeIndexRange
+                                new BTreeIndexRange(nullable)
                                 {
-                                    Field = a.Field,
-                                    From = a.Value,
+                                    Field = Field,
+                                    From = Value,
                                     FromInclusive = false,
-                                    To = b.Value,
+                                    To = otherEquality.Value,
                                     ToInclusive = false,
                                 },
-                                new BTreeIndexRange
+                                new BTreeIndexRange(nullable)
                                 {
-                                    Field = a.Field,
-                                    From = b.Value,
+                                    Field = Field,
+                                    From = otherEquality.Value,
                                     FromInclusive = false,
                                     To = null,
                                     ToInclusive = false,
@@ -317,26 +309,26 @@ public class BTreeIndexEquality : IndexQueryExpression
                         {
                             Terms =
                             [
-                                new BTreeIndexRange
+                                new BTreeIndexRange(nullable)
                                 {
-                                    Field = a.Field,
+                                    Field = Field,
                                     From = null,
                                     FromInclusive = false,
-                                    To = b.Value,
+                                    To = otherEquality.Value,
                                     ToInclusive = false,
                                 },
-                                new BTreeIndexRange
+                                new BTreeIndexRange(nullable)
                                 {
-                                    Field = a.Field,
-                                    From = b.Value,
+                                    Field = Field,
+                                    From = otherEquality.Value,
                                     FromInclusive = false,
-                                    To = a.Value,
+                                    To = Value,
                                     ToInclusive = false,
                                 },
-                                new BTreeIndexRange
+                                new BTreeIndexRange(nullable)
                                 {
-                                    Field = a.Field,
-                                    From = a.Value,
+                                    Field = Field,
+                                    From = Value,
                                     FromInclusive = false,
                                     To = null,
                                     ToInclusive = false,
@@ -345,32 +337,29 @@ public class BTreeIndexEquality : IndexQueryExpression
                         };
                         return true;
                 }
-
-                break;
         }
-    }
-
-    public override bool TryIntersect(IndexQueryExpression other, [NotNullWhen(true)] out QueryExpression? result)
-    {
-        var (success, res) = other switch
-        {
-            BTreeIndexEquality otherEquality => (TryIntersect(this, otherEquality, out var r), r),
-            BTreeIndexRange otherRange => (otherRange.TryIntersect(this, out var r), r),
-            _ => throw new InvalidOperationException(),
-        };
-        result = res?.Normalize();
-        return success;
     }
 
     public override bool TryInvert([NotNullWhen(true)] out QueryExpression? result)
     {
-        result = new BTreeIndexEquality
+        result = new BTreeIndexEquality(nullable)
         {
             Field = Field,
             Inverted = !Inverted,
             Value = Value,
         };
         return true;
+    }
+
+    public override bool TrySimplify([NotNullWhen(true)] out QueryExpression? result)
+    {
+        if (Value is null && !nullable)
+        {
+            result = Inverted ? Box.True() : Box.False();
+            return true;
+        }
+        result = null;
+        return false;
     }
 
     public override Expression ToExpression(ParameterExpression propertyParameter)
@@ -381,10 +370,8 @@ public class BTreeIndexEquality : IndexQueryExpression
     }
 }
 
-public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange>
+public class BTreeIndexRange(bool nullable) : IndexQueryExpression, IComparable<BTreeIndexRange>
 {
-    public override bool IsTriviallyTrue => From is null && To is null;
-    public override bool IsTriviallyFalse => false;
 
     public required IComparable? From { get; init; }
     public required IComparable? To { get; init; }
@@ -393,156 +380,41 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
     public required bool ToInclusive { get; init; }
 
 
-    public override bool TryInvert([NotNullWhen(true)] out QueryExpression? result)
-    {
-        result = (From, To) switch
-        {
-            (null, null) => null,
-            (_, null) => new BTreeIndexRange
-            {
-                From = null,
-                To = From,
-                FromInclusive = false,
-                ToInclusive = !FromInclusive,
-                Field = Field,
-            },
-            (null, _) => new BTreeIndexRange
-            {
-                From = To,
-                To = null,
-                FromInclusive = !ToInclusive,
-                ToInclusive = false,
-                Field = Field,
-            },
-            (_, _) => new Or
-            {
-                Terms =
-                [
-                    new BTreeIndexRange
-                    {
-                        From = null,
-                        To = From,
-                        FromInclusive = false,
-                        ToInclusive = !FromInclusive,
-                        Field = Field,
-                    },
-                    new BTreeIndexRange
-                    {
-                        From = To,
-                        To = null,
-                        FromInclusive = !ToInclusive,
-                        ToInclusive = false,
-                        Field = Field,
-                    }
-                ]
-            }
-        };
-        return result is not null;
-    }
-
-    private static void OrderSwap(ref BTreeIndexRange r1, ref BTreeIndexRange r2)
-    {
-        if (r1.CompareTo(r2) > 0)
-        {
-            (r1, r2) = (r2, r1);
-        }
-    }
-
-    private static int CompareEndpoints(IComparable? p1, bool p1Inclusive, bool p1IsTo, IComparable? p2,
-        bool p2Inclusive, bool p2IsTo)
-    {
-        switch (p1, p2)
-        {
-            case (null, null): return p1IsTo.CompareTo(p2IsTo);
-            case (null, _): return p1IsTo ? 1 : -1;
-            case (_, null): return p2IsTo ? -1 : 1;
-        }
-
-        var cmp = p1.CompareTo(p2);
-        if (cmp != 0) return cmp;
-
-        return (p1IsTo, p2IsTo) switch
-        {
-            (true, false) => p1Inclusive && p2Inclusive ? 0 : -1,
-            (false, true) => p1Inclusive && p2Inclusive ? 0 : 1,
-            (true, true) => p1Inclusive.CompareTo(p2Inclusive),
-            (false, false) => -p1Inclusive.CompareTo(p2Inclusive),
-        };
-    }
-
     public override bool TryIntersect(IndexQueryExpression? other, [NotNullWhen(true)] out QueryExpression? result)
     {
-        if (other is BTreeIndexEquality otherEquality)
+        return other switch
         {
-            if (TryIntersect(this, otherEquality, out var res))
-            {
-                result = res.Normalize();
-                return true;
-            }
-            result = null;
-            return false;
-        }
+            BTreeIndexEquality otherEquality => TryIntersect(otherEquality, out result),
+            BTreeIndexRange otherRange => TryIntersect(this, otherRange, nullable, out result),
+            _ => throw new ArgumentException(null, nameof(other)),
+        };
 
-        if (other is BTreeIndexRange otherRange)
-        {
-            if (TryIntersect(this, otherRange, out var res))
-            {
-                result = res.Normalize();
-                return true;
-            }
-            result = null;
-            return false;
-        }
-        throw new InvalidOperationException();
     }
 
-    public override Expression ToExpression(ParameterExpression propertyParameter)
+    private bool TryIntersect(BTreeIndexEquality other, [NotNullWhen(true)] out QueryExpression? result)
     {
-        var fromExpr = (From, FromInclusive) switch
+        if (other.Value is null)
         {
-            (null, _) => null,
-            (_, true) => Expression.GreaterThanOrEqual(propertyParameter, Expression.Constant(From)),
-            (_, false) => Expression.GreaterThan(propertyParameter, Expression.Constant(From)),
-        };
-        var toExpr = (To, ToInclusive) switch
-        {
-            (null, _) => null,
-            (_, true) => Expression.LessThanOrEqual(propertyParameter, Expression.Constant(To)),
-            (_, false) => Expression.LessThan(propertyParameter, Expression.Constant(To)),
-        };
-        return (fromExpr, toExpr) switch
-        {
-            (null, null) => Expression.Constant(true),
-            (var from, null) => from,
-            (null, var to) => to,
-            var (from, to) => Expression.AndAlso(from, to),
-        };
-    }
-
-    private static bool TryIntersect(BTreeIndexRange range, BTreeIndexEquality equality, [NotNullWhen(true)] out QueryExpression? result)
-    {
-        if (equality.Value is null)
-        {
-            if (equality.Inverted)
+            if (other.Inverted)
             {
-                result = range;
+                result = this;
                 return true;
             }
             result = null;
             return false;
         }
 
-        var cmpFrom = CompareEndpoints(range.From, range.FromInclusive, false, equality.Value, true, false);
-        var cmpTo = CompareEndpoints(range.To, range.ToInclusive, true, equality.Value, true, true);
+        var cmpFrom = CompareEndpoints(From, FromInclusive, false, other.Value, true, false);
+        var cmpTo = CompareEndpoints(To, ToInclusive, true, other.Value, true, true);
 
-        if (!equality.Inverted)
+        if (!other.Inverted)
         {
             switch (cmpFrom, cmpTo)
             {
-                case (0, > 0) when range.FromInclusive: // from = value < to
-                case (< 0, 0) when range.ToInclusive: // from < value = to
+                case (0, > 0) when FromInclusive: // from = value < to
+                case (< 0, 0) when ToInclusive: // from < value = to
                 case (< 0, > 0): // from < value < to
-                    result = equality;
+                    result = other;
                     return true;
                 default:
                     result = null;
@@ -551,23 +423,23 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
         }
         switch (cmpFrom, cmpTo)
         {
-            case (0, > 0) when range.FromInclusive: // from = value < to
-                result = new BTreeIndexRange
+            case (0, > 0) when FromInclusive: // from = value < to
+                result = new BTreeIndexRange(nullable)
                 {
-                    Field = range.Field,
-                    From = range.From,
+                    Field = Field,
+                    From = From,
                     FromInclusive = false,
-                    To = range.To,
-                    ToInclusive = range.ToInclusive,
+                    To = To,
+                    ToInclusive = ToInclusive,
                 };
                 return true;
-            case (< 0, 0) when range.ToInclusive: // from < value = to
-                result = new BTreeIndexRange
+            case (< 0, 0) when ToInclusive: // from < value = to
+                result = new BTreeIndexRange(nullable)
                 {
-                    Field = range.Field,
-                    From = range.From,
-                    FromInclusive = range.FromInclusive,
-                    To = range.To,
+                    Field = Field,
+                    From = From,
+                    FromInclusive = FromInclusive,
+                    To = To,
                     ToInclusive = false,
                 };
                 return true;
@@ -576,32 +448,32 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
                 {
                     Terms =
                     [
-                        new BTreeIndexRange
+                        new BTreeIndexRange(nullable)
                         {
-                            Field = range.Field,
-                            From = range.From,
-                            FromInclusive = range.FromInclusive,
-                            To = equality.Value,
+                            Field = Field,
+                            From = From,
+                            FromInclusive = FromInclusive,
+                            To = other.Value,
                             ToInclusive = false,
                         },
-                        new BTreeIndexRange
+                        new BTreeIndexRange(nullable)
                         {
-                            Field = range.Field,
-                            From = equality.Value,
+                            Field = Field,
+                            From = other.Value,
                             FromInclusive = false,
-                            To = range.To,
-                            ToInclusive = range.ToInclusive,
+                            To = To,
+                            ToInclusive = ToInclusive,
                         },
                     ],
                 };
                 return true;
             default:
-                result = range;
+                result = this;
                 return true;
         }
     }
 
-    private static bool TryIntersect(BTreeIndexRange r1, BTreeIndexRange r2, [NotNullWhen(true)] out QueryExpression? result)
+    private static bool TryIntersect(BTreeIndexRange r1, BTreeIndexRange r2, bool nullable, [NotNullWhen(true)] out QueryExpression? result)
     {
         if (!r1.Field.Equals(r2.Field))
         {
@@ -622,7 +494,7 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
                 return false;
             }
             case (> 0, > 0):
-                result = new BTreeIndexRange
+                result = new BTreeIndexRange(nullable)
                 {
                     Field = field,
                     From = r2.From,
@@ -632,7 +504,7 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
                 };
                 return true;
             default:
-                result = new BTreeIndexRange
+                result = new BTreeIndexRange(nullable)
                 {
                     Field = field,
                     From = r2.From,
@@ -649,7 +521,7 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
     {
         if (other is BTreeIndexRange otherRange)
         {
-            if (TryUnion(this, otherRange, out var res))
+            if (TryUnion(this, otherRange, nullable, out var res))
             {
                 result = res.Normalize();
                 return true;
@@ -659,7 +531,7 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
         }
         if (other is BTreeIndexEquality otherEquality)
         {
-            if (TryUnion(this, otherEquality, out var res))
+            if (TryUnion(otherEquality, out var res))
             {
                 result = res.Normalize();
                 return true;
@@ -670,55 +542,70 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
         throw new InvalidOperationException();
     }
 
-    private static bool TryUnion(BTreeIndexRange range, BTreeIndexEquality equality, [NotNullWhen(true)] out QueryExpression? result)
+    private bool TryUnion(BTreeIndexEquality other, [NotNullWhen(true)] out QueryExpression? result)
     {
-        var cmpFrom = CompareEndpoints(range.From, range.FromInclusive, false, equality.Value, true, false);
-        var cmpTo = CompareEndpoints(range.To, range.ToInclusive, true, equality.Value, true, true);
-        // TODO: CompareEndpoints takes into account that to/from are exclusive so it is -1 even when the values are equal
-        switch (cmpFrom, cmpTo)
+        if (other.Value is null)
         {
-            case (0, > 0) when !range.FromInclusive: // from = value < to
-                result = new BTreeIndexRange
-                {
-                    Field = range.Field,
-                    From = range.From,
-                    FromInclusive = true,
-                    To = range.To,
-                    ToInclusive = range.ToInclusive,
-                };
+            if (other.Inverted)
+            {
+                result = other;
                 return true;
-            case (<0,0) when !range.ToInclusive:
-                result = new BTreeIndexRange
-                {
-                    Field = range.Field,
-                    From = range.From,
-                    FromInclusive = range.FromInclusive,
-                    To = range.To,
-                    ToInclusive = true,
-                };
-                return true;
-            case (0, > 0) when range.FromInclusive: // from = value < to
-            case (< 0, 0) when range.ToInclusive: // from < value = to
-            case (< 0, > 0): // from < value < to
-                if (!equality.Inverted)
-                {
-                    result = range;
-                    return true;
-                }
-                result = Box.True();
-                return true;
-            default:
-                if (!equality.Inverted)
-                {
-                    result = null;
-                    return false;
-                }
-                result = equality;
-                return true;
+            }
+            result = null;
+            return false;
         }
+
+        if (Contains(other.Value))
+        {
+            if (!other.Inverted)
+            {
+                result = this;
+                return true;
+            }
+            result = new BTreeIndexRange(nullable)
+            {
+                Field = Field,
+                From = null,
+                FromInclusive = false,
+                To = null,
+                ToInclusive = false,
+            };
+            return true;
+        }
+        if (other.Inverted)
+        {
+            result = other;
+            return true;
+        }
+        if (From is not null && From.CompareTo(other.Value) == 0)
+        {
+            result = new BTreeIndexRange(nullable)
+            {
+                Field = Field,
+                From = From,
+                To = To,
+                FromInclusive = true,
+                ToInclusive = ToInclusive,
+            };
+            return true;
+        }
+        if (To is not null && To.CompareTo(other.Value) == 0)
+        {
+            result = new BTreeIndexRange(nullable)
+            {
+                Field = Field,
+                From = From,
+                To = To,
+                FromInclusive = FromInclusive,
+                ToInclusive = true,
+            };
+            return true;
+        }
+        result = null;
+        return false;
     }
 
-    private static bool TryUnion(BTreeIndexRange r1, BTreeIndexRange r2, [NotNullWhen(true)] out QueryExpression? result)
+    private static bool TryUnion(BTreeIndexRange r1, BTreeIndexRange r2, bool nullable, [NotNullWhen(true)] out QueryExpression? result)
     {
         if (!r1.Field.Equals(r2.Field))
         {
@@ -739,7 +626,7 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
                 return false;
             }
             case (_, > 0):
-                result = new BTreeIndexRange
+                result = new BTreeIndexRange(nullable)
                 {
                     Field = field,
                     From = r1.From,
@@ -749,7 +636,7 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
                 };
                 return true;
             default:
-                result = new BTreeIndexRange
+                result = new BTreeIndexRange(nullable)
                 {
                     Field = field,
                     From = r1.From,
@@ -759,6 +646,141 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
                 };
                 return true;
         }
+    }
+
+    public override bool TryInvert([NotNullWhen(true)] out QueryExpression? result)
+    {
+        result = (From, To) switch
+        {
+            (null, null) => null,
+            (not null, null) => new BTreeIndexRange(nullable)
+            {
+                From = null,
+                To = From,
+                FromInclusive = false,
+                ToInclusive = !FromInclusive,
+                Field = Field,
+            },
+            (null, not null) => new BTreeIndexRange(nullable)
+            {
+                From = To,
+                To = null,
+                FromInclusive = !ToInclusive,
+                ToInclusive = false,
+                Field = Field,
+            },
+            (not null, not null) => new Or
+            {
+                Terms =
+                [
+                    new BTreeIndexRange(nullable)
+                    {
+                        From = null,
+                        To = From,
+                        FromInclusive = false,
+                        ToInclusive = !FromInclusive,
+                        Field = Field,
+                    },
+                    new BTreeIndexRange(nullable)
+                    {
+                        From = To,
+                        To = null,
+                        FromInclusive = !ToInclusive,
+                        ToInclusive = false,
+                        Field = Field,
+                    }
+                ]
+            }
+        };
+        return result is not null;
+    }
+
+    public override bool TrySimplify([NotNullWhen(true)] out QueryExpression? result)
+    {
+        if (From == null && To == null)
+        {
+            result = new BTreeIndexEquality(nullable)
+            {
+                Field = Field,
+                Inverted = true,
+                Value = null,
+            };
+            return true;
+        }
+        result = null;
+        return false;
+    }
+
+    public override Expression ToExpression(ParameterExpression propertyParameter)
+    {
+        var fromExpr = (From, FromInclusive) switch
+        {
+            (null, _) => null,
+            (not null, true) => Expression.GreaterThanOrEqual(propertyParameter, Expression.Constant(From)),
+            (not null, false) => Expression.GreaterThan(propertyParameter, Expression.Constant(From)),
+        };
+        var toExpr = (To, ToInclusive) switch
+        {
+            (null, _) => null,
+            (not null, true) => Expression.LessThanOrEqual(propertyParameter, Expression.Constant(To)),
+            (not null, false) => Expression.LessThan(propertyParameter, Expression.Constant(To)),
+        };
+        return (fromExpr, toExpr) switch
+        {
+            (null, null) => Expression.Constant(true),
+            (var from, null) => from,
+            (null, var to) => to,
+            var (from, to) => Expression.AndAlso(from, to),
+        };
+    }
+
+    private static void OrderSwap(ref BTreeIndexRange r1, ref BTreeIndexRange r2)
+    {
+        if (r1.CompareTo(r2) > 0)
+        {
+            (r1, r2) = (r2, r1);
+        }
+    }
+
+    private static int CompareEndpoints(IComparable? p1, bool p1Inclusive, bool p1IsTo, IComparable? p2,
+        bool p2Inclusive, bool p2IsTo)
+    {
+        switch (p1, p2)
+        {
+            case (null, null): return p1IsTo.CompareTo(p2IsTo);
+            case (null, not null): return p1IsTo ? 1 : -1;
+            case (not null, null): return p2IsTo ? -1 : 1;
+        }
+
+        var cmp = p1.CompareTo(p2);
+        if (cmp != 0) return cmp;
+
+        return (p1IsTo, p2IsTo) switch
+        {
+            (true, false) => p1Inclusive && p2Inclusive ? 0 : -1,
+            (false, true) => p1Inclusive && p2Inclusive ? 0 : 1,
+            (true, true) => p1Inclusive.CompareTo(p2Inclusive),
+            (false, false) => -p1Inclusive.CompareTo(p2Inclusive),
+        };
+    }
+
+    private bool Contains(IComparable value)
+    {
+        var fromCmp = value.CompareTo(From);
+        var toCmp = value.CompareTo(To);
+        return (From, fromCmp, FromInclusive, To, toCmp, ToInclusive) switch
+        {
+            (null, _, _, null, _, _) => true, // -inf < value < +inf
+            (null, _, _, not null, <= 0, true) => true, // -inf < value <= to
+            (null, _, _, not null, < 0, false) => true, // -inf < value < to
+            (not null, >= 0, true, null, _, _) => true, // from <= value < +inf
+            (not null, > 0, false, null, _, _) => true, // from < value < +inf
+            (not null, >= 0, true, not null, <= 0, true) => true, // from <= value <= to
+            (not null, >= 0, true, not null, < 0, false) => true, // from <= value < to
+            (not null, > 0, false, not null, <= 0, true) => true, // from < value <= to
+            (not null, > 0, false, not null, < 0, false) => true, // from < value < to
+            _ => false,
+        };
     }
 
     public override string ToString()
@@ -782,17 +804,17 @@ public class BTreeIndexRange : IndexQueryExpression, IComparable<BTreeIndexRange
         return builder.ToString();
     }
 
+    public override int GetHashCode()
+    {
+        return 0; // TODO: make an actually useful hashcode
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is not BTreeIndexRange otherRange) return false;
         return Field.Equals(otherRange.Field) && Equals(From, otherRange.From) &&
                Equals(To, otherRange.To) && FromInclusive == otherRange.FromInclusive &&
                ToInclusive == otherRange.ToInclusive;
-    }
-
-    public override int GetHashCode()
-    {
-        return 0; // TODO: make an actually useful hashcode
     }
 
     public override bool Equals(QueryExpression? other)

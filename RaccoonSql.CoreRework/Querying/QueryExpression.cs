@@ -315,13 +315,9 @@ public abstract class QueryExpression : IEquatable<QueryExpression>
 
         protected override QueryExpression VisitIndexQueryExpression(IndexQueryExpression queryExpression)
         {
-            if (queryExpression.IsTriviallyTrue)
+            if (queryExpression.TrySimplify(out var result))
             {
-                return Box.True();
-            }
-            if (queryExpression.IsTriviallyFalse)
-            {
-                return Box.False();
+                return Visit(result);
             }
             return base.VisitIndexQueryExpression(queryExpression);
         }
