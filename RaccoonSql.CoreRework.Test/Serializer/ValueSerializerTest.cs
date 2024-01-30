@@ -5,12 +5,38 @@ namespace RaccoonSql.CoreRework.Test.Serializer;
 
 public class ValueSerializerTest
 {
+    public enum CuteAnimal
+    {
+        Raccoon, Frog, Shark, Fox, 
+    }
+    
     struct Demo(Guid guid)
     {
         public required int Foo;
         public required int Bar;
         public required float FooBar;
         private Guid _guid = guid;
+    }
+    
+    [Theory]
+    [InlineData(CuteAnimal.Raccoon)]
+    [InlineData(CuteAnimal.Fox)]
+    [InlineData(CuteAnimal.Frog)]
+    [InlineData(CuteAnimal.Shark)]
+
+    public void SerializeEnum(CuteAnimal animal)
+    {
+        // arrange
+        var serializer = new ValueSerializer<CuteAnimal>();
+        var ms = new MemoryStream();
+        
+        // act
+        serializer.Serialize(ms, animal);
+        
+        // assert
+        ms.ToArray().Should().BeEquivalentTo([
+            ..BitConverter.GetBytes((int)animal),
+        ]);
     }
 
     [Theory]
@@ -38,6 +64,28 @@ public class ValueSerializerTest
             ..BitConverter.GetBytes(foobar),
             ..guid.ToByteArray(),
         ]);
+    }
+    
+    
+    [Theory]
+    [InlineData(CuteAnimal.Raccoon)]
+    [InlineData(CuteAnimal.Fox)]
+    [InlineData(CuteAnimal.Frog)]
+    [InlineData(CuteAnimal.Shark)]
+
+    public void DeserializeEnum(CuteAnimal animal)
+    {
+        // arrange
+        var serializer = new ValueSerializer<CuteAnimal>();
+        var ms = new MemoryStream([
+            ..BitConverter.GetBytes((int)animal),
+        ]);
+        
+        // act
+        var result = serializer.Deserialize(ms);
+        
+        // assert
+        result.Should().Be(animal);
     }
 
     [Theory]
