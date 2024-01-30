@@ -35,6 +35,13 @@ public static class RaccSerializer
         return ConstructSerializer(typeof(ListSerializerWithCollector<,>), elementType, collectorType);
     }
 
+    public static ISerializer GetTypedDictionarySerializer<T>() => GetTypedDictionarySerializer(typeof(T));
+
+    public static ISerializer GetTypedDictionarySerializer(Type t)
+    {
+        return ConstructSerializer(typeof(TypedDictionarySerializer<>), t);
+    }
+
     public static void Serialize(Stream stream, object o)
     {
         var serializer = GetSerializer(o.GetType());
@@ -326,6 +333,8 @@ public class StringSerializer : ISerializer
     {
         Serialize(stream, (string)o);
     }
+
+    public Type SerializedType { get; } = typeof(string);
 }
 
 internal class ByteSpanSerializer
@@ -385,4 +394,6 @@ public class ValueArraySerializer<T> : ISerializer where T : unmanaged
     {
         Serialize(stream, (T[])o);
     }
+
+    public Type SerializedType { get; } = typeof(T[]);
 }
