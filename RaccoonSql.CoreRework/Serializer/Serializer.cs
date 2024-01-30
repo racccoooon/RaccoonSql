@@ -9,29 +9,47 @@ namespace RaccoonSql.CoreRework.Serializer;
 
 public static class RaccSerializer
 {
-    private static ConcurrentDictionary<Type, ISerializer> _serializers = new();
-    
+    private static readonly ConcurrentDictionary<Type, ISerializer> Serializers = new();
+
+    private static readonly Dictionary<Type, Type> SpecialGenericSerializers = new()
+    {
+        { typeof(List<>), typeof(ListSerializer<>) },
+        { typeof(Dictionary<,>), typeof(DictionarySerializer<,>) },
+        { typeof(HashSet<>), typeof(HashSetSerializer<>) },
+    };
+
+
     public static ISerializer GetSerializer<T>() => GetSerializer(typeof(T));
+
+    private static ISerializer ConstructSerializer(Type serializerType, params Type[] typeArgs)
+    {
+        return (ISerializer)serializerType
+            .MakeGenericType(typeArgs)
+            .GetConstructor([])!
+            .Invoke([]);
+    }
+
+    private static ISerializer MakeSerializer(Type type)
+    {
+        if (type.IsPrimitive)
+            return ConstructSerializer(typeof(PrimitiveSerializer<>), type);
+        if (type.IsArray && type.GetElementType()!.IsPrimitive)
+            return ConstructSerializer(typeof(PrimitiveArraySerializer<>), type.GetElementType()!);
+        if (type == typeof(string))
+            return new StringSerializer();
+        if (type.IsGenericType && SpecialGenericSerializers.TryGetValue(type.GetGenericTypeDefinition(), out var serializerType))
+        {
+            return ConstructSerializer(serializerType, type.GenericTypeArguments);
+        }
+
+        return ConstructSerializer(typeof(ClassSerializer<>), type);
+
+        throw new ArgumentException($"cannot serialize type {type.FullName}", nameof(type));
+    }
 
     public static ISerializer GetSerializer(Type type)
     {
-        return _serializers.GetOrAdd(type, t =>
-        {
-            if (t.IsPrimitive)
-                return (ISerializer)typeof(PrimitiveSerializer<>)
-                    .MakeGenericType(t)
-                    .GetConstructor([])!
-                    .Invoke([]);
-            if (t.IsArray && t.GetElementType()!.IsPrimitive)
-                return (ISerializer)typeof(PrimitiveArraySerializer<>)
-                    .MakeGenericType(t.GetElementType()!)
-                    .GetConstructor([])!
-                    .Invoke([]);
-            if (t == typeof(string))
-                return new StringSerializer();
-            
-            throw new ArgumentException($"cannot serialize type {t.FullName}", nameof(type));
-        });
+        return Serializers.GetOrAdd(type, MakeSerializer);
     }
 
     public static void Serialize(Stream stream, object o)
@@ -55,8 +73,8 @@ public interface ISerializer
     void Serialize(Stream stream, object o);
 }
 
-public class DictionarySerializer<TKey, TValue> : ISerializer 
-    where TKey : notnull 
+public class DictionarySerializer<TKey, TValue> : ISerializer
+    where TKey : notnull
     where TValue : notnull
 {
     private readonly PrimitiveSerializer<int> _intSerializer = new();
@@ -76,7 +94,7 @@ public class DictionarySerializer<TKey, TValue> : ISerializer
         }
         return result;
     }
-    
+
     object ISerializer.Deserialize(Stream stream)
     {
         return Deserialize(stream);
@@ -98,17 +116,93 @@ public class DictionarySerializer<TKey, TValue> : ISerializer
     }
 }
 
+public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
+{
+    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
+
+    public HashSet<TElement> Deserialize(Stream stream)
+    {
+        var count = _intSerializer.Deserialize(stream);
+        var result = new HashSet<TElement>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var value = _elementSerializer.Deserialize(stream);
+
+            result.Add((TElement)value);
+        }
+        return result;
+    }
+
+    object ISerializer.Deserialize(Stream stream)
+    {
+        return Deserialize(stream);
+    }
+
+    public void Serialize(Stream stream, HashSet<TElement> hashSet)
+    {
+        _intSerializer.Serialize(stream, hashSet.Count);
+        foreach (var value in hashSet)
+        {
+            _elementSerializer.Serialize(stream, value);
+        }
+    }
+
+    void ISerializer.Serialize(Stream stream, object o)
+    {
+        Serialize(stream, (HashSet<TElement>)o);
+    }
+}
+
+public class ListSerializer<TElement> : ISerializer
+{
+    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
+
+    public List<TElement> Deserialize(Stream stream)
+    {
+        var count = _intSerializer.Deserialize(stream);
+        var result = new List<TElement>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var value = _elementSerializer.Deserialize(stream);
+
+            result.Add((TElement)value);
+        }
+        return result;
+    }
+
+    object ISerializer.Deserialize(Stream stream)
+    {
+        return Deserialize(stream);
+    }
+
+    public void Serialize(Stream stream, List<TElement> list)
+    {
+        _intSerializer.Serialize(stream, list.Count);
+        foreach (var value in list)
+        {
+            _elementSerializer.Serialize(stream, value!);
+        }
+    }
+
+    public void Serialize(Stream stream, object o)
+    {
+        Serialize(stream, (List<TElement>)o);
+    }
+}
+
 public class ClassSerializer<T> : ISerializer
     where T : class
 {
     private readonly List<(ISerializer, Action<T, object>, Func<T, object>)> _serializers = [];
-    
+
     public ClassSerializer()
     {
         foreach (var propertyInfo in typeof(T).GetProperties())
         {
             var serializer = RaccSerializer.GetSerializer(propertyInfo.PropertyType);
-            
+
             var tParam = Expression.Parameter(typeof(T), "t");
             var vParam = Expression.Parameter(typeof(object), "v");
             var memberAccess = Expression.MakeMemberAccess(tParam, propertyInfo);
@@ -117,11 +211,11 @@ public class ClassSerializer<T> : ISerializer
             var setter = Expression.Lambda<Action<T, object>>(assignMember, [tParam, vParam]);
             var memberCast = Expression.Convert(memberAccess, typeof(object));
             var getter = Expression.Lambda<Func<T, object>>(memberCast, [tParam]);
-            
+
             _serializers.Add((serializer, setter.Compile(), getter.Compile()));
         }
     }
-    
+
     public T Deserialize(Stream stream)
     {
         var t = (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
@@ -146,7 +240,7 @@ public class ClassSerializer<T> : ISerializer
             serializer.Serialize(stream, value);
         }
     }
-    
+
     void ISerializer.Serialize(Stream stream, object o)
     {
         Serialize(stream, (T)o);
@@ -156,7 +250,7 @@ public class ClassSerializer<T> : ISerializer
 public class StringSerializer : ISerializer
 {
     private readonly ByteSpanSerializer _byteArraySerializer = new();
-    
+
     public string Deserialize(Stream stream)
     {
         var bytes = _byteArraySerializer.Deserialize(stream);
@@ -183,11 +277,11 @@ public class StringSerializer : ISerializer
 internal class ByteSpanSerializer
 {
     private readonly PrimitiveSerializer<int> _intSerializer = new();
-    
+
     public Span<byte> Deserialize(Stream stream)
     {
         var length = _intSerializer.Deserialize(stream);
-        
+
         var array = new byte[length];
         var buffer = new Span<byte>(array);
         stream.ReadExactly(buffer);
@@ -204,16 +298,16 @@ internal class ByteSpanSerializer
 public class PrimitiveArraySerializer<T> : ISerializer where T : unmanaged
 {
     private readonly PrimitiveSerializer<int> _intSerializer = new();
-    
+
     static PrimitiveArraySerializer()
     {
         Debug.Assert(typeof(T).IsPrimitive);
     }
-    
+
     public T[] Deserialize(Stream stream)
     {
         var length = _intSerializer.Deserialize(stream);
-        
+
         var array = new T[length];
         var buffer = MemoryMarshal.AsBytes(new Span<T>(array));
         stream.ReadExactly(buffer);
@@ -228,7 +322,7 @@ public class PrimitiveArraySerializer<T> : ISerializer where T : unmanaged
     public void Serialize(Stream stream, T[] ts)
     {
         _intSerializer.Serialize(stream, ts.Length);
-        
+
         var bytes = MemoryMarshal.AsBytes(new ReadOnlySpan<T>(ts));
         stream.Write(bytes);
     }
@@ -245,7 +339,7 @@ public unsafe class PrimitiveSerializer<T> : ISerializer where T : unmanaged
     {
         Debug.Assert(typeof(T).IsPrimitive);
     }
-    
+
     public T Deserialize(Stream stream)
     {
         Span<byte> buffer = stackalloc byte[sizeof(T)];
