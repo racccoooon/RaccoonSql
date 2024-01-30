@@ -10,6 +10,7 @@ public class ClassSerializerTest
         public required string Foo { get; set; }
         public required int Bar { get; set; }
         public required byte[] Image { get; set; }
+        public string FooBar => $"{Foo}{Bar}";
     }
 
     [Theory]

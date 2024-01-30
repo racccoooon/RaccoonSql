@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Expression = System.Linq.Expressions.Expression;
 
 namespace RaccoonSql.CoreRework.Serializer;
 
@@ -28,7 +29,7 @@ public static class RaccSerializer
     public static ISerializer GetListSerializer<T>() => GetListSerializer(typeof(T));
 
     public static ISerializer GetListSerializer(Type t) => GetSerializer(typeof(List<>).MakeGenericType(t));
-    
+
     public static ISerializer GetListSerializer<TElement, TCollector>() => GetListSerializer(typeof(TElement), typeof(TCollector));
 
     public static ISerializer GetListSerializer(Type elementType, Type collectorType)
@@ -56,7 +57,7 @@ public static class RaccSerializer
         var serializer = GetSerializer(type);
         return serializer.Deserialize(stream);
     }
-    
+
     private static ISerializer ConstructSerializer(Type serializerType, params Type[] typeArgs)
     {
         return (ISerializer)serializerType
@@ -315,35 +316,41 @@ public unsafe class ValueSerializer<T> : ISerializer
 public class ClassSerializer<T> : ISerializer
     where T : class
 {
-    private readonly List<(ISerializer, Action<T, object>, Func<T, object>)> _serializers = [];
+    private readonly Action<Stream, T> _serializer;
+    private readonly Action<Stream, T> _deserializer;
 
     public ClassSerializer()
     {
+        List<Expression> readers = [];
+        List<Expression> writers = [];
+
+        var tParam = Expression.Parameter(typeof(T), "t");
+        var streamParam = Expression.Parameter(typeof(Stream), "stream");
+        
+
         foreach (var propertyInfo in typeof(T).GetProperties())
         {
-            var serializer = RaccSerializer.GetSerializer(propertyInfo.PropertyType);
+            if (!propertyInfo.CanRead || !propertyInfo.CanWrite) continue;
+            var serializerInstance = RaccSerializer.GetSerializer(propertyInfo.PropertyType);
 
-            var tParam = Expression.Parameter(typeof(T), "t");
-            var vParam = Expression.Parameter(typeof(object), "v");
             var memberAccess = Expression.MakeMemberAccess(tParam, propertyInfo);
-            var vCast = Expression.Convert(vParam, propertyInfo.PropertyType);
-            var assignMember = Expression.Assign(memberAccess, vCast);
-            var setter = Expression.Lambda<Action<T, object>>(assignMember, [tParam, vParam]);
-            var memberCast = Expression.Convert(memberAccess, typeof(object));
-            var getter = Expression.Lambda<Func<T, object>>(memberCast, [tParam]);
-
-            _serializers.Add((serializer, setter.Compile(), getter.Compile()));
+            var serializerExpr = Expression.Constant(serializerInstance); // TODO: this probably doesn't work, right?
+            var deserializeCall = Expression.Call(serializerExpr, typeof(ISerializer).GetMethod(nameof(ISerializer.Deserialize))!, streamParam);
+            readers.Add(Expression.Assign(memberAccess, Expression.Convert(deserializeCall, propertyInfo.PropertyType)));
+            var serializeCall = Expression.Call(serializerExpr, typeof(ISerializer).GetMethod(nameof(ISerializer.Serialize))!, streamParam,
+                Expression.Convert(memberAccess, typeof(object)));
+            writers.Add(serializeCall);
         }
+
+        _serializer = Expression.Lambda<Action<Stream, T>>(Expression.Block(writers), [streamParam, tParam]).Compile();
+        _deserializer = Expression.Lambda<Action<Stream, T>>(Expression.Block(readers), [streamParam, tParam]).Compile();
+
     }
 
     public T Deserialize(Stream stream)
     {
         var t = (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
-        foreach (var (serializer, setter, _) in _serializers)
-        {
-            var value = serializer.Deserialize(stream);
-            setter(t, value);
-        }
+        _deserializer(stream, t);
         return t;
     }
 
@@ -354,11 +361,7 @@ public class ClassSerializer<T> : ISerializer
 
     public void Serialize(Stream stream, T t)
     {
-        foreach (var (serializer, _, getter) in _serializers)
-        {
-            var value = getter(t);
-            serializer.Serialize(stream, value);
-        }
+        _serializer(stream, t);
     }
 
     void ISerializer.Serialize(Stream stream, object o)
