@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq.Expressions;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -189,6 +188,38 @@ public class ListSerializer<TElement> : ISerializer
     public void Serialize(Stream stream, object o)
     {
         Serialize(stream, (List<TElement>)o);
+    }
+}
+
+public unsafe class ValueStructSerializer<T> : ISerializer
+    where T : unmanaged
+{
+    private readonly int _size = sizeof(T);
+    static ValueStructSerializer()
+    {
+        Debug.Assert(!RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+    }
+
+    public T Deserialize(Stream stream)
+    {
+        var buffer = stackalloc byte[_size];
+        stream.ReadExactly(new Span<byte>(buffer, _size));
+        return Unsafe.Read<T>(buffer);
+    }
+
+    object ISerializer.Deserialize(Stream stream)
+    {
+        return Deserialize(stream);
+    }
+
+    public void Serialize(Stream stream, T t)
+    {
+        stream.Write(new ReadOnlySpan<byte>((byte*)&t, _size));
+    }
+
+    void ISerializer.Serialize(Stream stream, object o)
+    {
+        Serialize(stream, (T)o);
     }
 }
 
