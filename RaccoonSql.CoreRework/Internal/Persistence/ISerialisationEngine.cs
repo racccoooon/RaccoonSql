@@ -1,9 +1,4 @@
-using System.Collections;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using MemoryPack;
 using RaccoonSql.CoreRework.Internal.Utils;
 using RaccoonSql.CoreRework.Serializer;
@@ -89,10 +84,7 @@ internal class SerialisationEngine : ISerialisationEngine
         foreach (var changeSet in commitChanges.Changes)
         {
             RaccSerializer.Serialize(stream, changeSet.ModelName);
-            var listSerializer = (ISerializer)typeof(ListSerializerWithCollector<,>)
-                .MakeGenericType(changeSet.ModelType, typeof(ModelBase))
-                .GetConstructor([])!
-                .Invoke([]);
+            var listSerializer = RaccSerializer.GetListSerializer(changeSet.ModelType, typeof(ModelBase));
             listSerializer.Serialize(stream, changeSet.Added);
             RaccSerializer.Serialize(stream, changeSet.Removed);
             listSerializer.Serialize(stream, changeSet.Changed);
@@ -117,10 +109,7 @@ internal class SerialisationEngine : ISerialisationEngine
             {
                 var changeSetModelName = RaccSerializer.Deserialize<string>(stream);
                 var modelType = modelTypes[changeSetModelName];
-                var listType = (ISerializer)typeof(ListSerializerWithCollector<,>)
-                    .MakeGenericType(modelType, typeof(ModelBase))
-                    .GetConstructor([])!
-                    .Invoke([]);
+                var listType = RaccSerializer.GetListSerializer(modelType, typeof(ModelBase));
                 var added = listType.Deserialize(stream);
                 var removed = RaccSerializer.Deserialize<HashSet<Guid>>(stream);
                 var changed = listType.Deserialize(stream);

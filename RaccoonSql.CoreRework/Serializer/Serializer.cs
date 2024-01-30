@@ -19,43 +19,20 @@ public static class RaccSerializer
 
     public static ISerializer GetSerializer<T>() => GetSerializer(typeof(T));
 
-    private static ISerializer ConstructSerializer(Type serializerType, params Type[] typeArgs)
-    {
-        return (ISerializer)serializerType
-            .MakeGenericType(typeArgs)
-            .GetConstructor([])!
-            .Invoke([]);
-    }
-
-    private static ISerializer MakeSerializer(Type type)
-    {
-        
-        if (type.IsValueType)
-        {
-            return ConstructSerializer(typeof(ValueSerializer<>), type);
-        }
-        
-        if (type.IsArray && type.GetElementType()!.IsValueType)
-            return ConstructSerializer(typeof(ValueArraySerializer<>), type.GetElementType()!);
-        if (type == typeof(string))
-            return new StringSerializer();
-        if (type.IsGenericType && SpecialGenericSerializers.TryGetValue(type.GetGenericTypeDefinition(), out var serializerType))
-        {
-            return ConstructSerializer(serializerType, type.GenericTypeArguments);
-        }
-
-
-        if (type.IsClass)
-        {
-            return ConstructSerializer(typeof(ClassSerializer<>), type);
-        }
-        
-        throw new ArgumentException($"cannot serialize type {type.FullName}", nameof(type));
-    }
-
     public static ISerializer GetSerializer(Type type)
     {
         return Serializers.GetOrAdd(type, MakeSerializer);
+    }
+
+    public static ISerializer GetListSerializer<T>() => GetListSerializer(typeof(T));
+
+    public static ISerializer GetListSerializer(Type t) => GetSerializer(typeof(List<>).MakeGenericType(t));
+    
+    public static ISerializer GetListSerializer<TElement, TCollector>() => GetListSerializer(typeof(TElement), typeof(TCollector));
+
+    public static ISerializer GetListSerializer(Type elementType, Type collectorType)
+    {
+        return ConstructSerializer(typeof(ListSerializerWithCollector<,>), elementType, collectorType);
     }
 
     public static void Serialize(Stream stream, object o)
@@ -70,6 +47,41 @@ public static class RaccSerializer
     {
         var serializer = GetSerializer(type);
         return serializer.Deserialize(stream);
+    }
+    
+    
+    private static ISerializer ConstructSerializer(Type serializerType, params Type[] typeArgs)
+    {
+        return (ISerializer)serializerType
+            .MakeGenericType(typeArgs)
+            .GetConstructor([])!
+            .Invoke([]);
+    }
+
+    private static ISerializer MakeSerializer(Type type)
+    {
+
+        if (type.IsValueType)
+        {
+            return ConstructSerializer(typeof(ValueSerializer<>), type);
+        }
+
+        if (type.IsArray && type.GetElementType()!.IsValueType)
+            return ConstructSerializer(typeof(ValueArraySerializer<>), type.GetElementType()!);
+        if (type == typeof(string))
+            return new StringSerializer();
+        if (type.IsGenericType && SpecialGenericSerializers.TryGetValue(type.GetGenericTypeDefinition(), out var serializerType))
+        {
+            return ConstructSerializer(serializerType, type.GenericTypeArguments);
+        }
+
+
+        if (type.IsClass)
+        {
+            return ConstructSerializer(typeof(ClassSerializer<>), type);
+        }
+
+        throw new ArgumentException($"cannot serialize type {type.FullName}", nameof(type));
     }
 }
 
@@ -199,48 +211,13 @@ public class ListSerializerWithCollector<TElement, TCollector> : ISerializer
     }
 }
 
-public class ListSerializer<TElement> : ISerializer
-{
-    private readonly ValueSerializer<int> _intSerializer = new();
-    private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
-
-    public List<TElement> Deserialize(Stream stream)
-    {
-        var count = _intSerializer.Deserialize(stream);
-        var result = new List<TElement>(count);
-        for (var i = 0; i < count; i++)
-        {
-            var value = _elementSerializer.Deserialize(stream);
-
-            result.Add((TElement)value);
-        }
-        return result;
-    }
-
-    object ISerializer.Deserialize(Stream stream)
-    {
-        return Deserialize(stream);
-    }
-
-    public void Serialize(Stream stream, List<TElement> list)
-    {
-        _intSerializer.Serialize(stream, list.Count);
-        foreach (var value in list)
-        {
-            _elementSerializer.Serialize(stream, value!);
-        }
-    }
-
-    void ISerializer.Serialize(Stream stream, object o)
-    {
-        Serialize(stream, (List<TElement>)o);
-    }
-}
+public class ListSerializer<TElement> : ListSerializerWithCollector<TElement, TElement>;
 
 public unsafe class ValueSerializer<T> : ISerializer
     where T : unmanaged
 {
     private readonly int _size = sizeof(T);
+
     static ValueSerializer()
     {
         Debug.Assert(!RuntimeHelpers.IsReferenceOrContainsReferences<T>());
