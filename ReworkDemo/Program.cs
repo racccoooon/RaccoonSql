@@ -4,6 +4,7 @@ using System.Reflection;
 using Bogus;
 using Humanizer;
 using RaccoonSql.CoreRework;
+using RaccoonSql.CoreRework.Indexes;
 
 Console.WriteLine("Hello, Raccoon-World!");
 
@@ -35,7 +36,13 @@ var store = new ModelStore(options);
 {
     using var transaction = store.Transaction();
 
-    
+    /*transaction.Set<Raccoon>().Query()
+        .Where(r => (r.CutenessLevel >= 100 && r.CutenessLevel < 200) || (r.CutenessLevel >= 150))
+        .Where(r => r.CutenessLevel < 200)
+        .Where(r => r.Floofines > 1)
+        .Where(r => r.Gender != "male" || r.Gender != null)
+        .Where(r => !(r.Age == 10 || r.Gender == "none of your business"))
+        .Get();*/
     
     var raccoons = transaction.Set<Raccoon>();
 

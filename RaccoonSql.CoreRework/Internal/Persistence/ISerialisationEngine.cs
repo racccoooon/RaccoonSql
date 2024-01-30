@@ -80,17 +80,25 @@ internal class SerialisationEngine : ISerialisationEngine
 
     public void SerializeWal(Stream stream, CommitChanges commitChanges)
     {
-        RaccSerializer.Serialize(stream, commitChanges.Version);
-        RaccSerializer.Serialize(stream, commitChanges.Changes.Count);
+        var ulongSerializer = RaccSerializer.GetValueSerializer<ulong>();
+        var guidSerializer = RaccSerializer.GetValueSerializer<Guid>();
+        var intSerializer = RaccSerializer.GetValueSerializer<int>();
+        
+        ulongSerializer.Serialize(stream, commitChanges.Version);
+        intSerializer.Serialize(stream, commitChanges.Changes.Count);
+
+        var stringSerializer = RaccSerializer.GetStringSerializer();
+        
         foreach (var changeSet in commitChanges.Changes)
         {
-            RaccSerializer.Serialize(stream, changeSet.ModelName);
-            var listSerializer = RaccSerializer.GetListSerializer(changeSet.ModelType, typeof(ModelBase));
-            listSerializer.Serialize(stream, changeSet.Added);
+            stringSerializer.Serialize(stream, changeSet.ModelName);
+            
+            var addedSerializer = RaccSerializer.GetListSerializer(changeSet.ModelType, typeof(ModelBase));
+            addedSerializer.Serialize(stream, changeSet.Added);
+            
             RaccSerializer.Serialize(stream, changeSet.Removed);
             var changesSerializer = RaccSerializer.GetTypedDictionarySerializer(changeSet.ModelType);
-            var guidSerializer = RaccSerializer.GetValueSerializer<Guid>();
-            var intSerializer = RaccSerializer.GetValueSerializer<int>();
+            
             intSerializer.Serialize(stream, changeSet.Changed.Count);
             foreach (var (id, changes) in changeSet.Changed)
             {
@@ -113,24 +121,32 @@ internal class SerialisationEngine : ISerialisationEngine
             var version = RaccSerializer.Deserialize<ulong>(stream);
             var changeSetCount = RaccSerializer.Deserialize<int>(stream);
             var changes = new List<ChangeSet>(changeSetCount);
-            
+
+            var stringSerializer = RaccSerializer.GetStringSerializer();
+            var intSerializer = RaccSerializer.GetValueSerializer<int>();
+            var guidSerializer = RaccSerializer.GetValueSerializer<Guid>();
+            var removedSerializer = RaccSerializer.GetHashSetSerializer<Guid>();
+
             for (var i = 0; i < changeSetCount; i++)
             {
-                var changeSetModelName = RaccSerializer.Deserialize<string>(stream);
+                var changeSetModelName = stringSerializer.Deserialize(stream);
                 var modelType = modelTypes[changeSetModelName];
-                var listSerializer = RaccSerializer.GetListSerializer(modelType, typeof(ModelBase));
-                var added = listSerializer.Deserialize(stream);
-                var removed = RaccSerializer.Deserialize<HashSet<Guid>>(stream);
+                
+                var addedSerializer = RaccSerializer.GetListSerializer(modelType, typeof(ModelBase));
+                var added = addedSerializer.Deserialize(stream);
+                
+                var removed = removedSerializer.Deserialize(stream);
+                
                 var changesSerializer = RaccSerializer.GetTypedDictionarySerializer(modelType);
-                var guidSerializer = RaccSerializer.GetValueSerializer<Guid>();
-                var intSerializer = RaccSerializer.GetValueSerializer<int>();
+                
                 var changeCount = intSerializer.Deserialize(stream);
                 List<(Guid, Dictionary<PropertyInfo, object?>)> changed = new(changeCount);
+                
                 for (var j = 0; j < changeCount; j++)
                 {
                     var id = guidSerializer.Deserialize(stream);
-                    var dict = (Dictionary<PropertyInfo, object?>)changesSerializer.Deserialize(stream);
-                    changed.Add((id, dict));
+                    var dict = changesSerializer.Deserialize(stream);
+                    changed.Add((id, dict)!);
                 }
                 
                 changes.Add(new ChangeSet(modelType, (List<ModelBase>)added, removed, changed));

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -20,9 +19,11 @@ public static class RaccSerializer
     };
 
     public static ISerializer GetSerializer<T>() => GetSerializer(typeof(T));
-    public static ValueSerializer<T> GetValueSerializer<T>() where T : unmanaged 
+    public static ValueSerializer<T> GetValueSerializer<T>() where T : unmanaged
         => (ValueSerializer<T>)GetSerializer<T>();
 
+    public static StringSerializer GetStringSerializer() => (StringSerializer)GetSerializer<string>();
+    
     public static ISerializer GetSerializer(Type type)
     {
         return Serializers.GetOrAdd(type, MakeSerializer);
@@ -54,11 +55,12 @@ public static class RaccSerializer
         return ConstructSerializer(typeof(ListSerializerWithCollector<,>), elementType, collectorType);
     }
 
-    public static TypedDictionarySerializer<T> GetTypedDictionarySerializer<T>() => (TypedDictionarySerializer<T>)GetTypedDictionarySerializer(typeof(T));
+    public static TypedDictionarySerializer GetTypedDictionarySerializer<T>() 
+        => GetTypedDictionarySerializer(typeof(T));
 
-    public static ISerializer GetTypedDictionarySerializer(Type t)
+    public static TypedDictionarySerializer GetTypedDictionarySerializer(Type t)
     {
-        return ConstructSerializer(typeof(TypedDictionarySerializer<>), t);
+        return new TypedDictionarySerializer(t);
     }
 
     public static void Serialize(Stream stream, object o)
@@ -116,15 +118,15 @@ public interface ISerializer
     Type SerializedType { get; }
 }
 
-public readonly struct TypedDictionarySerializer<T> : ISerializer
+public readonly struct TypedDictionarySerializer : ISerializer
 {
     private readonly Dictionary<string, (ISerializer serializer, PropertyInfo propertyInfo)> _serializers = [];
-    private readonly StringSerializer _stringSerializer = new();
-    private readonly ValueSerializer<int> _intSerializer = new();
+    private readonly StringSerializer _stringSerializer = RaccSerializer.GetStringSerializer();
+    private readonly ValueSerializer<int> _intSerializer = RaccSerializer.GetValueSerializer<int>();
 
-    public TypedDictionarySerializer()
+    public TypedDictionarySerializer(Type t)
     {
-        foreach (var propertyInfo in typeof(T).GetProperties())
+        foreach (var propertyInfo in t.GetProperties())
         {
             var serializer = RaccSerializer.GetSerializer(propertyInfo.PropertyType);
             _serializers[propertyInfo.Name] = (serializer, propertyInfo);
