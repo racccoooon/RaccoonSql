@@ -20,6 +20,8 @@ public static class RaccSerializer
     };
 
     public static ISerializer GetSerializer<T>() => GetSerializer(typeof(T));
+    public static ValueSerializer<T> GetValueSerializer<T>() where T : unmanaged 
+        => (ValueSerializer<T>)GetSerializer<T>();
 
     public static ISerializer GetSerializer(Type type)
     {

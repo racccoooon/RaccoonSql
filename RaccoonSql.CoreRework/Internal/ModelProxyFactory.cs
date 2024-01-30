@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Reflection;
 using Castle.DynamicProxy;
 using RaccoonSql.CoreRework.Internal.Utils;
 
@@ -7,6 +9,7 @@ internal static class ModelProxyFactory
 {
     private static readonly ProxyGenerator ProxyGenerator = new();
     private static readonly PropertyInterceptor Interceptor = new();
+    private static readonly ConcurrentDictionary<Type, Dictionary<MethodInfo, PropertyInfo>> SetterPropertyMapsByType = new(); 
     
     public static TModel GenerateProxy<TModel>(TModel source)
         where TModel : ModelBase
@@ -17,11 +20,24 @@ internal static class ModelProxyFactory
             [Interceptor]);
         
         AutoMapper.Map(source, model);
-        
-        model.Changes = new Dictionary<string, object?>();
+
+        model.SetterPropertyMap = SetterPropertyMapsByType.GetOrAdd(typeof(TModel), MakeSetterPropertyMap);
+        model.Changes = new Dictionary<PropertyInfo, object?>();
         model.TrackChanges = true;
 
         return model;
+    }
+
+    private static Dictionary<MethodInfo, PropertyInfo> MakeSetterPropertyMap(Type modelType)
+    {
+        var result = new Dictionary<MethodInfo, PropertyInfo>();
+
+        foreach (var propertyInfo in modelType.GetProperties())
+        {
+            result[propertyInfo.SetMethod!] = propertyInfo;
+        }
+        
+        return result;
     }
 }
 
@@ -37,7 +53,7 @@ public class PropertyInterceptor : IInterceptor
         }
         
         var methodName = invocation.Method.Name;
-        if (!methodName.StartsWith("set_"))
+        if (!model.SetterPropertyMap.TryGetValue(invocation.Method, out var propertyInfo))
         {
             invocation.Proceed();
             return;
@@ -49,7 +65,7 @@ public class PropertyInterceptor : IInterceptor
             model.OnChange = null;
         }
 
-        model.Changes[methodName[4..]] = invocation.Arguments[0];
+        model.Changes[propertyInfo] = invocation.Arguments[0];
         
         invocation.Proceed();
     }

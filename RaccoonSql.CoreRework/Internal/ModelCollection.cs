@@ -135,19 +135,6 @@ internal class ModelCollection<TModel> : IModelCollection
         }
     }
 
-    void IModelCollection.ValidateCheckConstraints(ChangeSet changeSet)
-    {
-        foreach (var addedModel in changeSet.Added)
-        {
-            ValidateCheckConstraints(addedModel);
-        }
-
-        foreach (var changedModel in changeSet.Changed)
-        {
-            ValidateCheckConstraints(changedModel);
-        }
-    }
-
     public void Persist()
     {
         if (!_isDirty) return;
@@ -159,6 +146,20 @@ internal class ModelCollection<TModel> : IModelCollection
         }
 
         _isDirty = false;
+    }
+
+    void IModelCollection.ValidateCheckConstraints(ChangeSet changeSet)
+    {
+        //TODO: reimplement later
+        // foreach (var addedModel in changeSet.Added)
+        // {
+        //     ValidateCheckConstraints(addedModel);
+        // }
+        //
+        // foreach (var changedModel in changeSet.Changed)
+        // {
+        //     ValidateCheckConstraints(id, changes);
+        // }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -237,11 +238,11 @@ internal class ModelCollection<TModel> : IModelCollection
         }
 
         // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
-        foreach (TModel model in changeSet.Changed)
+        foreach (var (id, changes) in changeSet.Changed)
         {
-            var chunkIndex = CalculateChunkIndex(model.Id);
+            var chunkIndex = CalculateChunkIndex(id);
             var chunk = _collectionChunks[chunkIndex];
-            chunk.ApplyChanges(model.Id, model);
+            chunk.ApplyChanges(id, changes);
         }
 
         // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop

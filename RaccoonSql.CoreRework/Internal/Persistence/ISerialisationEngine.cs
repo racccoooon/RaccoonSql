@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using MemoryPack;
 using RaccoonSql.CoreRework.Internal.Utils;
 using RaccoonSql.CoreRework.Serializer;
@@ -87,7 +88,15 @@ internal class SerialisationEngine : ISerialisationEngine
             var listSerializer = RaccSerializer.GetListSerializer(changeSet.ModelType, typeof(ModelBase));
             listSerializer.Serialize(stream, changeSet.Added);
             RaccSerializer.Serialize(stream, changeSet.Removed);
-            listSerializer.Serialize(stream, changeSet.Changed);
+            var changesSerializer = RaccSerializer.GetTypedDictionarySerializer(changeSet.ModelType);
+            var guidSerializer = RaccSerializer.GetValueSerializer<Guid>();
+            var intSerializer = RaccSerializer.GetValueSerializer<int>();
+            intSerializer.Serialize(stream, changeSet.Changed.Count);
+            foreach (var (id, changes) in changeSet.Changed)
+            {
+                guidSerializer.Serialize(stream, id);
+                changesSerializer.Serialize(stream, changes);
+            }
         }
         stream.Flush();
     }
@@ -109,12 +118,22 @@ internal class SerialisationEngine : ISerialisationEngine
             {
                 var changeSetModelName = RaccSerializer.Deserialize<string>(stream);
                 var modelType = modelTypes[changeSetModelName];
-                var listType = RaccSerializer.GetListSerializer(modelType, typeof(ModelBase));
-                var added = listType.Deserialize(stream);
+                var listSerializer = RaccSerializer.GetListSerializer(modelType, typeof(ModelBase));
+                var added = listSerializer.Deserialize(stream);
                 var removed = RaccSerializer.Deserialize<HashSet<Guid>>(stream);
-                var changed = listType.Deserialize(stream);
+                var changesSerializer = RaccSerializer.GetTypedDictionarySerializer(modelType);
+                var guidSerializer = RaccSerializer.GetValueSerializer<Guid>();
+                var intSerializer = RaccSerializer.GetValueSerializer<int>();
+                var changeCount = intSerializer.Deserialize(stream);
+                List<(Guid, Dictionary<PropertyInfo, object?>)> changed = new(changeCount);
+                for (var j = 0; j < changeCount; j++)
+                {
+                    var id = guidSerializer.Deserialize(stream);
+                    var dict = (Dictionary<PropertyInfo, object?>)changesSerializer.Deserialize(stream);
+                    changed.Add((id, dict));
+                }
                 
-                changes.Add(new ChangeSet(modelType, (List<ModelBase>)added, removed, (List<ModelBase>)changed));
+                changes.Add(new ChangeSet(modelType, (List<ModelBase>)added, removed, changed));
             }
 
             commitChanges = new CommitChanges

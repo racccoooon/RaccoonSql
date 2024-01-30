@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace RaccoonSql.CoreRework.Internal.Utils;
@@ -6,9 +7,9 @@ namespace RaccoonSql.CoreRework.Internal.Utils;
 internal static class AutoMapper
 {
     private static readonly Dictionary<Type, List<Action<object, object>>> Mappings = new();
-    private static readonly Dictionary<Type, Dictionary<string, Action<object, object>>> Setters = new();
+    private static readonly Dictionary<Type, Dictionary<PropertyInfo, Action<object, object>>> Setters = new();
 
-    public static void ApplyChanges<T>(T t, Dictionary<string, object?> changes)
+    public static void ApplyChanges<T>(T t, Dictionary<PropertyInfo, object?> changes)
     {
         var type = typeof(T);
         if (!Setters.TryGetValue(type, out var setters))
@@ -25,7 +26,7 @@ internal static class AutoMapper
                 var setterAction = Expression.Lambda<Action<object, object>>(valueSetter, [pTarget, setterValue]);
                 var compiledSetter = setterAction.Compile();
 
-                setters[propertyInfo.Name] = compiledSetter;
+                setters[propertyInfo] = compiledSetter;
             }
 
             Setters[type] = setters;

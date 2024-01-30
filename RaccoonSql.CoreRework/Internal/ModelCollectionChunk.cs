@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Abstractions;
+using System.Reflection;
 using RaccoonSql.CoreRework.Internal.Persistence;
 using RaccoonSql.CoreRework.Internal.Utils;
 
@@ -60,11 +61,11 @@ internal class ModelCollectionChunk<TModel>()
         return proxy;
     }
 
-    public void ApplyChanges(Guid id, TModel modelChanges)
+    public void ApplyChanges(Guid id, Dictionary<PropertyInfo, object?> modelChanges)
     {
         var modelIndex = _modelIndexes[id];
         var model = _models[modelIndex];
-        AutoMapper.Map(model, modelChanges);
+        AutoMapper.ApplyChanges(model, modelChanges);
         _isDirty = true;
     }
 

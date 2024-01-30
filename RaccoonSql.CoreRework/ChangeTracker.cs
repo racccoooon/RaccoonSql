@@ -57,12 +57,12 @@ public sealed class ChangeTracker<TModel>
         }
         
         var added = new List<ModelBase>(_addedModels.Count);
-        foreach (var (id, model) in _addedModels)
+        foreach (var (_, model) in _addedModels)
         {
             added.Add(model);
         }
 
-        return new ChangeSet(typeof(TModel), added, _deletedModelIds, changed);
+        return new ChangeSet(typeof(TModel), added, _deletedModelIds, changed.Select(x => (x.Id, x.Changes)).ToList());
     }
     
     internal void Add(List<TModel> models)

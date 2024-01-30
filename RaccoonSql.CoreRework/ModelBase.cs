@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace RaccoonSql.CoreRework;
 
 /// <summary>
@@ -23,6 +25,7 @@ public abstract class ModelBase
     }
 
     internal Action<Guid>? OnChange;
-    internal Dictionary<string, object?> Changes = default!;
+    internal Dictionary<PropertyInfo, object?> Changes = default!;
+    internal Dictionary<MethodInfo, PropertyInfo> SetterPropertyMap = default!;
     internal bool TrackChanges { get; set; }
 }
