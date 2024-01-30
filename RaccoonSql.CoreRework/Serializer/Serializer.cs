@@ -17,7 +17,6 @@ public static class RaccSerializer
         { typeof(HashSet<>), typeof(HashSetSerializer<>) },
     };
 
-
     public static ISerializer GetSerializer<T>() => GetSerializer(typeof(T));
 
     private static ISerializer ConstructSerializer(Type serializerType, params Type[] typeArgs)
@@ -62,7 +61,7 @@ public static class RaccSerializer
     public static void Serialize(Stream stream, object o)
     {
         var serializer = GetSerializer(o.GetType());
-        throw new NotImplementedException();
+        serializer.Serialize(stream, o);
     }
 
     public static T Deserialize<T>(Stream stream) => (T)Deserialize(stream, typeof(T));
@@ -70,7 +69,7 @@ public static class RaccSerializer
     public static object Deserialize(Stream stream, Type type)
     {
         var serializer = GetSerializer(type);
-        throw new NotImplementedException();
+        return serializer.Deserialize(stream);
     }
 }
 
@@ -161,6 +160,45 @@ public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
     }
 }
 
+public class ListSerializerWithCollector<TElement, TCollector> : ISerializer
+    where TElement : TCollector
+{
+    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
+
+    public List<TCollector> Deserialize(Stream stream)
+    {
+        var count = _intSerializer.Deserialize(stream);
+        var result = new List<TCollector>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var value = _elementSerializer.Deserialize(stream);
+
+            result.Add((TElement)value);
+        }
+        return result;
+    }
+
+    object ISerializer.Deserialize(Stream stream)
+    {
+        return Deserialize(stream);
+    }
+
+    public void Serialize(Stream stream, List<TCollector> list)
+    {
+        _intSerializer.Serialize(stream, list.Count);
+        foreach (var value in list)
+        {
+            _elementSerializer.Serialize(stream, value!);
+        }
+    }
+
+    void ISerializer.Serialize(Stream stream, object o)
+    {
+        Serialize(stream, (List<TCollector>)o);
+    }
+}
+
 public class ListSerializer<TElement> : ISerializer
 {
     private readonly ValueSerializer<int> _intSerializer = new();
@@ -193,7 +231,7 @@ public class ListSerializer<TElement> : ISerializer
         }
     }
 
-    public void Serialize(Stream stream, object o)
+    void ISerializer.Serialize(Stream stream, object o)
     {
         Serialize(stream, (List<TElement>)o);
     }

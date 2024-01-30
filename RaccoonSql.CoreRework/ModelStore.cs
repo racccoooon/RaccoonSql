@@ -63,6 +63,7 @@ public sealed class ModelStore : IModelStore, IDisposable
         _versionId = _metadata.Version;
 
         ApplyWal();
+        Persist();
     }
 
     private void ApplyWal()

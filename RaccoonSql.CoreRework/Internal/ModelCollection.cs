@@ -157,6 +157,8 @@ internal class ModelCollection<TModel> : IModelCollection
             var chunk = _collectionChunks[index];
             chunk.Persist(_options.FileSystem, _options.DirectoryPath, _name, index);
         }
+
+        _isDirty = false;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -239,7 +241,7 @@ internal class ModelCollection<TModel> : IModelCollection
         {
             var chunkIndex = CalculateChunkIndex(model.Id);
             var chunk = _collectionChunks[chunkIndex];
-            chunk.ApplyChanges(model.Id, model.Changes);
+            chunk.ApplyChanges(model.Id, model);
         }
 
         // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop

@@ -60,11 +60,11 @@ internal class ModelCollectionChunk<TModel>()
         return proxy;
     }
 
-    public void ApplyChanges(Guid id, Dictionary<string, object?> modelChanges)
+    public void ApplyChanges(Guid id, TModel modelChanges)
     {
         var modelIndex = _modelIndexes[id];
         var model = _models[modelIndex];
-        AutoMapper.ApplyChanges(model, modelChanges);
+        AutoMapper.Map(model, modelChanges);
         _isDirty = true;
     }
 
@@ -80,5 +80,6 @@ internal class ModelCollectionChunk<TModel>()
     {
         if (!_isDirty) return;
         PersistenceEngine.Instance.WriteChunk(fileSystem, rootPath, collectionName, chunkIndex, this);
+        _isDirty = false;
     }
 }

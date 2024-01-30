@@ -34,19 +34,6 @@ var store = new ModelStore(options);
 // force loading
 {
     using var transaction = store.Transaction();
-    transaction.Set<Raccoon>().Query()
-        .Where(r => (r.CutenessLevel >= 100 && r.CutenessLevel < 200) || (r.CutenessLevel >= 150))
-        .Where(r => r.CutenessLevel < 200)
-        .Where(r => r.Floofines > 1)
-        .Where(r => r.Gender != "male" || r.Gender != null)
-        .Where(r => !(r.Age == 10 || r.Gender == "none of your business"))
-        .Get();
-    transaction.Set<Raccoon>().Query()
-        .Where(r => (r.CutenessLevel > 100 || true) && (r.FirstName == null || r.FirstName != null) && !(r.CutenessLevel == 1 || r.LastName.StartsWith("Rac")))
-        .Get();
-    transaction.Set<Raccoon>().Query()
-        .Where(r => (r.CutenessLevel > 100 || r.CutenessLevel > 100 || r.CutenessLevel < 200) && (r.CutenessLevel == 1 || r.LastName.StartsWith("Rac")))
-        .Get();
 
     
     
@@ -68,7 +55,7 @@ using (var transaction = store.Transaction())
     Console.WriteLine($"Loaded {raccoonCount} raccoons in {startUpWatch.Elapsed.Humanize()}");
 }
 
-var hundredThousandRaccoons = Enumerable.Range(0, 1)
+var hundredThousandRaccoons = Enumerable.Range(0, 100_000)
     .Select(_ => raccoonFaker.Generate())
     .ToList();
 var raccoonIds = hundredThousandRaccoons.Select(x => x.Id).ToList();
