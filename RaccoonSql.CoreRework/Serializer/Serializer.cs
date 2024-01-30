@@ -30,10 +30,14 @@ public static class RaccSerializer
 
     private static ISerializer MakeSerializer(Type type)
     {
-        if (type.IsPrimitive)
-            return ConstructSerializer(typeof(PrimitiveSerializer<>), type);
-        if (type.IsArray && type.GetElementType()!.IsPrimitive)
-            return ConstructSerializer(typeof(PrimitiveArraySerializer<>), type.GetElementType()!);
+        
+        if (type.IsValueType)
+        {
+            return ConstructSerializer(typeof(ValueSerializer<>), type);
+        }
+        
+        if (type.IsArray && type.GetElementType()!.IsValueType)
+            return ConstructSerializer(typeof(ValueArraySerializer<>), type.GetElementType()!);
         if (type == typeof(string))
             return new StringSerializer();
         if (type.IsGenericType && SpecialGenericSerializers.TryGetValue(type.GetGenericTypeDefinition(), out var serializerType))
@@ -41,10 +45,6 @@ public static class RaccSerializer
             return ConstructSerializer(serializerType, type.GenericTypeArguments);
         }
 
-        if (type.IsValueType)
-        {
-            return ConstructSerializer(typeof(ValueStructSerializer<>), type);
-        }
 
         if (type.IsClass)
         {
@@ -84,7 +84,7 @@ public class DictionarySerializer<TKey, TValue> : ISerializer
     where TKey : notnull
     where TValue : notnull
 {
-    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ValueSerializer<int> _intSerializer = new();
     private readonly ISerializer _keySerializer = RaccSerializer.GetSerializer<TKey>();
     private readonly ISerializer _valueSerializer = RaccSerializer.GetSerializer<TValue>();
 
@@ -125,7 +125,7 @@ public class DictionarySerializer<TKey, TValue> : ISerializer
 
 public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
 {
-    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ValueSerializer<int> _intSerializer = new();
     private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
 
     public HashSet<TElement> Deserialize(Stream stream)
@@ -163,7 +163,7 @@ public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
 
 public class ListSerializer<TElement> : ISerializer
 {
-    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ValueSerializer<int> _intSerializer = new();
     private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
 
     public List<TElement> Deserialize(Stream stream)
@@ -199,11 +199,11 @@ public class ListSerializer<TElement> : ISerializer
     }
 }
 
-public unsafe class ValueStructSerializer<T> : ISerializer
+public unsafe class ValueSerializer<T> : ISerializer
     where T : unmanaged
 {
     private readonly int _size = sizeof(T);
-    static ValueStructSerializer()
+    static ValueSerializer()
     {
         Debug.Assert(!RuntimeHelpers.IsReferenceOrContainsReferences<T>());
     }
@@ -315,7 +315,7 @@ public class StringSerializer : ISerializer
 
 internal class ByteSpanSerializer
 {
-    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ValueSerializer<int> _intSerializer = new();
 
     public Span<byte> Deserialize(Stream stream)
     {
@@ -334,13 +334,13 @@ internal class ByteSpanSerializer
     }
 }
 
-public class PrimitiveArraySerializer<T> : ISerializer where T : unmanaged
+public class ValueArraySerializer<T> : ISerializer where T : unmanaged
 {
-    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ValueSerializer<int> _intSerializer = new();
 
-    static PrimitiveArraySerializer()
+    static ValueArraySerializer()
     {
-        Debug.Assert(typeof(T).IsPrimitive);
+        Debug.Assert(typeof(T).IsValueType);
     }
 
     public T[] Deserialize(Stream stream)
@@ -369,37 +369,5 @@ public class PrimitiveArraySerializer<T> : ISerializer where T : unmanaged
     void ISerializer.Serialize(Stream stream, object o)
     {
         Serialize(stream, (T[])o);
-    }
-}
-
-public unsafe class PrimitiveSerializer<T> : ISerializer where T : unmanaged
-{
-    static PrimitiveSerializer()
-    {
-        Debug.Assert(typeof(T).IsPrimitive);
-    }
-
-    public T Deserialize(Stream stream)
-    {
-        Span<byte> buffer = stackalloc byte[sizeof(T)];
-        stream.ReadExactly(buffer);
-        return MemoryMarshal.Read<T>(buffer);
-    }
-
-    object ISerializer.Deserialize(Stream stream)
-    {
-        return Deserialize(stream);
-    }
-
-    public void Serialize(Stream stream, T t)
-    {
-        Span<byte> buffer = stackalloc byte[sizeof(T)];
-        MemoryMarshal.Write(buffer, t);
-        stream.Write(buffer);
-    }
-
-    void ISerializer.Serialize(Stream stream, object o)
-    {
-        Serialize(stream, (T)o);
     }
 }

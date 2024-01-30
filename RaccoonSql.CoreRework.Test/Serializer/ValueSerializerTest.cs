@@ -3,15 +3,77 @@ using RaccoonSql.CoreRework.Serializer;
 
 namespace RaccoonSql.CoreRework.Test.Serializer;
 
-public class PrimitiveSerializerTest
+public class ValueSerializerTest
 {
+    struct Demo(Guid guid)
+    {
+        public required int Foo;
+        public required int Bar;
+        public required float FooBar;
+        private Guid _guid = guid;
+    }
+
+    [Theory]
+    [InlineData(10, 27, 23.45f)]
+    public void SerializeStruct(int foo, int bar, float foobar)
+    {
+        // arrange
+        var guid = new Guid();
+        var demo = new Demo(guid)
+        {
+            Foo = foo,
+            Bar = bar,
+            FooBar = foobar,
+        };
+        var serializer = new ValueSerializer<Demo>();
+        var ms = new MemoryStream();
+
+        // act
+        serializer.Serialize(ms, demo);
+
+        // assert
+        ms.ToArray().Should().BeEquivalentTo([
+            ..BitConverter.GetBytes(foo),
+            ..BitConverter.GetBytes(bar),
+            ..BitConverter.GetBytes(foobar),
+            ..guid.ToByteArray(),
+        ]);
+    }
+
+    [Theory]
+    [InlineData(10, 27, 23.45f)]
+    public void DeserializeStruct(int foo, int bar, float foobar)
+    {
+        // arrange
+        var guid = new Guid();
+        var demo = new Demo(guid)
+        {
+            Foo = foo,
+            Bar = bar,
+            FooBar = foobar,
+        };
+        var serializer = new ValueSerializer<Demo>();
+        var ms = new MemoryStream([
+            ..BitConverter.GetBytes(foo),
+            ..BitConverter.GetBytes(bar),
+            ..BitConverter.GetBytes(foobar),
+            ..guid.ToByteArray(),
+        ]);
+
+        // act
+        var result = serializer.Deserialize(ms);
+
+        // assert
+        result.Should().BeEquivalentTo(demo);
+    }
+    
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void SerializeBool(bool b)
     {
         // arrange
-        var serializer = new PrimitiveSerializer<bool>();
+        var serializer = new ValueSerializer<bool>();
         var ms = new MemoryStream();
         
         // act
@@ -32,7 +94,7 @@ public class PrimitiveSerializerTest
     public void SerializeInt(int i)
     {
         // arrange
-        var serializer = new PrimitiveSerializer<int>();
+        var serializer = new ValueSerializer<int>();
         var ms = new MemoryStream();
         
         // act
@@ -53,7 +115,7 @@ public class PrimitiveSerializerTest
     public void SerializeLong(long l)
     {
         // arrange
-        var serializer = new PrimitiveSerializer<long>();
+        var serializer = new ValueSerializer<long>();
         var ms = new MemoryStream();
         
         // act
@@ -74,7 +136,7 @@ public class PrimitiveSerializerTest
     public void DeserializeInt(int i)
     {
         // arrange
-        var serializer = new PrimitiveSerializer<int>();
+        var serializer = new ValueSerializer<int>();
         var ms = new MemoryStream(BitConverter.GetBytes(i));
         
         // act
@@ -94,7 +156,7 @@ public class PrimitiveSerializerTest
     public void DeserializeLong(long l)
     {
         // arrange
-        var serializer = new PrimitiveSerializer<long>();
+        var serializer = new ValueSerializer<long>();
         var ms = new MemoryStream(BitConverter.GetBytes(l));
         
         // act
@@ -110,7 +172,7 @@ public class PrimitiveSerializerTest
     public void DeserializeBool(bool b)
     {
         // arrange
-        var serializer = new PrimitiveSerializer<bool>();
+        var serializer = new ValueSerializer<bool>();
         var ms = new MemoryStream(BitConverter.GetBytes(b));
         
         // act
