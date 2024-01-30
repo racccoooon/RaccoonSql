@@ -41,6 +41,11 @@ public static class RaccSerializer
             return ConstructSerializer(serializerType, type.GenericTypeArguments);
         }
 
+        if (type.IsValueType)
+        {
+            return ConstructSerializer(typeof(ValueStructSerializer<>), type);
+        }
+
         return ConstructSerializer(typeof(ClassSerializer<>), type);
 
         throw new ArgumentException($"cannot serialize type {type.FullName}", nameof(type));
