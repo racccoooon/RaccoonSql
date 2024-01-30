@@ -39,7 +39,7 @@ public class ModelProxyFactoryTest
         // assert
         proxy.Changes.Should().HaveCount(1);
         proxy.Changes.Should().Contain(x =>
-            x.Key == nameof(DemoModel.String)
+            x.Key.Name == nameof(DemoModel.String)
             && x.Value == "new string");
     }
 }

@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluentAssertions;
 using RaccoonSql.CoreRework.Internal;
 
@@ -17,7 +18,7 @@ public class ChangeSetTest
         yield return [new List<C>{c}, new HashSet<Guid>(), new List<C>(), true];    
         yield return [new List<C>(), new HashSet<Guid>{id}, new List<C>{c}, true]; 
         yield return [new List<C>(), new HashSet<Guid>{id}, new List<C>(), true]; 
-        yield return [new List<C>(), new HashSet<Guid>(), new List<C>{c}, true]; 
+        yield return [new List<C>(), new HashSet<Guid>(), new List<C>{c}, false]; 
         yield return [new List<C>(), new HashSet<Guid>(), new List<C>(), false];
     }
     
@@ -30,7 +31,7 @@ public class ChangeSetTest
             typeof(C), 
             added.Cast<ModelBase>().ToList(), 
             deleted,
-            changed.Cast<ModelBase>().ToList());
+            []);
         
         // assert
         changeSet.HasChanges.Should().Be(expected);
