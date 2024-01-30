@@ -24,7 +24,7 @@ public class ClassSerializerTest
             Bar = bar,
             Image = image,
         };
-        var serializer = new ClassSerializer<Demo>();
+        var serializer = RaccSerializer.GetClassSerializer<Demo>();
         var ms = new MemoryStream();
 
         // act
@@ -55,7 +55,7 @@ public class ClassSerializerTest
             Bar = bar,
             Image = image,
         };
-        var serializer = new ClassSerializer<Demo>();
+        var serializer = RaccSerializer.GetClassSerializer<Demo>();
         var stringBytes = foo
             .Select(BitConverter.GetBytes)
             .SelectMany(x => x)

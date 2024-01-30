@@ -27,7 +27,7 @@ public class ValueSerializerTest
     public void SerializeEnum(CuteAnimal animal)
     {
         // arrange
-        var serializer = new ValueSerializer<CuteAnimal>();
+        var serializer = RaccSerializer.GetValueSerializer<CuteAnimal>();
         var ms = new MemoryStream();
         
         // act
@@ -51,7 +51,7 @@ public class ValueSerializerTest
             Bar = bar,
             FooBar = foobar,
         };
-        var serializer = new ValueSerializer<Demo>();
+        var serializer = RaccSerializer.GetValueSerializer<Demo>();
         var ms = new MemoryStream();
 
         // act
@@ -76,7 +76,7 @@ public class ValueSerializerTest
     public void DeserializeEnum(CuteAnimal animal)
     {
         // arrange
-        var serializer = new ValueSerializer<CuteAnimal>();
+        var serializer = RaccSerializer.GetValueSerializer<CuteAnimal>();
         var ms = new MemoryStream([
             ..BitConverter.GetBytes((int)animal),
         ]);
@@ -100,7 +100,7 @@ public class ValueSerializerTest
             Bar = bar,
             FooBar = foobar,
         };
-        var serializer = new ValueSerializer<Demo>();
+        var serializer = RaccSerializer.GetValueSerializer<Demo>();
         var ms = new MemoryStream([
             ..BitConverter.GetBytes(foo),
             ..BitConverter.GetBytes(bar),
@@ -121,7 +121,7 @@ public class ValueSerializerTest
     public void SerializeBool(bool b)
     {
         // arrange
-        var serializer = new ValueSerializer<bool>();
+        var serializer = RaccSerializer.GetValueSerializer<bool>();
         var ms = new MemoryStream();
         
         // act
@@ -142,7 +142,7 @@ public class ValueSerializerTest
     public void SerializeInt(int i)
     {
         // arrange
-        var serializer = new ValueSerializer<int>();
+        var serializer = RaccSerializer.GetValueSerializer<int>();
         var ms = new MemoryStream();
         
         // act
@@ -163,7 +163,7 @@ public class ValueSerializerTest
     public void SerializeLong(long l)
     {
         // arrange
-        var serializer = new ValueSerializer<long>();
+        var serializer = RaccSerializer.GetValueSerializer<long>();
         var ms = new MemoryStream();
         
         // act
@@ -184,7 +184,7 @@ public class ValueSerializerTest
     public void DeserializeInt(int i)
     {
         // arrange
-        var serializer = new ValueSerializer<int>();
+        var serializer = RaccSerializer.GetValueSerializer<int>();
         var ms = new MemoryStream(BitConverter.GetBytes(i));
         
         // act
@@ -204,7 +204,7 @@ public class ValueSerializerTest
     public void DeserializeLong(long l)
     {
         // arrange
-        var serializer = new ValueSerializer<long>();
+        var serializer = RaccSerializer.GetValueSerializer<long>();
         var ms = new MemoryStream(BitConverter.GetBytes(l));
         
         // act
@@ -220,7 +220,7 @@ public class ValueSerializerTest
     public void DeserializeBool(bool b)
     {
         // arrange
-        var serializer = new ValueSerializer<bool>();
+        var serializer = RaccSerializer.GetValueSerializer<bool>();
         var ms = new MemoryStream(BitConverter.GetBytes(b));
         
         // act

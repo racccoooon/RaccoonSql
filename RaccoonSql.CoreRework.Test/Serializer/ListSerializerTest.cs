@@ -11,7 +11,7 @@ public class ListSerializerTest
     {
         // arrange
         List<string> list = ["Geld", "Cuteness", "Coolness"];
-        var serializer = new ListSerializer<string>();
+        var serializer = RaccSerializer.GetListSerializer<string>();
         var ms = new MemoryStream();
 
         // act
@@ -28,7 +28,7 @@ public class ListSerializerTest
     {
         // arrange
         List<int> list = [2, 3, 5];
-        var serializer = new ListSerializer<int>();
+        var serializer = RaccSerializer.GetListSerializer<int>();
         var ms = new MemoryStream();
 
         // act
@@ -56,7 +56,7 @@ public class ListSerializerTest
             new Raccoon {Name = "Gertlinde", Cuteness=83, Floofiness = 2500},
             new Raccoon {Name = "Franziskus", Cuteness=66, Floofiness = 50},
         ];
-        var serializer = new ListSerializer<Raccoon>();
+        var serializer = RaccSerializer.GetListSerializer<Raccoon>();
         var ms = new MemoryStream();
 
         // act

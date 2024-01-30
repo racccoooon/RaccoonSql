@@ -23,7 +23,7 @@ public class TypedDictionarySerializerTest
             {typeof(Demo).GetProperty(nameof(Demo.Bar))!, "Text!"},
         };
         var ms = new MemoryStream();
-        var serializer = new TypedDictionarySerializer<Demo>();
+        var serializer = RaccSerializer.GetTypedDictionarySerializer<Demo>();
 
         // act
         serializer.Serialize(ms, dict);

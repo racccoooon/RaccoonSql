@@ -15,7 +15,7 @@ public class DictionarySerializerTest
             { "Cuteness", 100 },
             { "Coolness", 9001 },
         };
-        var serializer = new DictionarySerializer<string, int>();
+        var serializer = RaccSerializer.GetDictionarySerializer<string, int>();
         var ms = new MemoryStream();
 
         // act

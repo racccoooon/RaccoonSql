@@ -17,7 +17,7 @@ public class ValueArraySerializerTest
     public void SerializeStructArray()
     {
         // arrange 
-        var serializer = new ValueArraySerializer<Demo>();
+        var serializer = RaccSerializer.GetValueArraySerializer<Demo>();
         var ms = new MemoryStream();
         var guid1 = new Guid();
         var guid2 = new Guid();
@@ -53,7 +53,7 @@ public class ValueArraySerializerTest
     public void SerializeBoolArray()
     {
         // arrange 
-        var serializer = new ValueArraySerializer<bool>();
+        var serializer = RaccSerializer.GetValueArraySerializer<bool>();
         var ms = new MemoryStream();
 
         // act
@@ -74,7 +74,7 @@ public class ValueArraySerializerTest
     public void SerializeIntArray()
     {
         // arrange 
-        var serializer = new ValueArraySerializer<int>();
+        var serializer = RaccSerializer.GetValueArraySerializer<int>();
         var ms = new MemoryStream();
 
         // act
@@ -99,7 +99,7 @@ public class ValueArraySerializerTest
     public void SerializeLongArray()
     {
         // arrange 
-        var serializer = new ValueArraySerializer<long>();
+        var serializer = RaccSerializer.GetValueArraySerializer<long>();
         var ms = new MemoryStream();
 
         // act
@@ -124,7 +124,7 @@ public class ValueArraySerializerTest
     public void DeserializeStructArray()
     {
         // arrange 
-        var serializer = new ValueArraySerializer<Demo>();
+        var serializer = RaccSerializer.GetValueArraySerializer<Demo>();
         var guid1 = new Guid();
         var guid2 = new Guid();
         var guid3 = new Guid();
@@ -157,7 +157,7 @@ public class ValueArraySerializerTest
     public void DeserializeBoolArray()
     {
         // arrange 
-        var serializer = new ValueArraySerializer<bool>();
+        var serializer = RaccSerializer.GetValueArraySerializer<bool>();
         var ms = new MemoryStream([
             ..BitConverter.GetBytes(2),
             ..BitConverter.GetBytes(true),
@@ -175,7 +175,7 @@ public class ValueArraySerializerTest
     public void DeserializeIntArray()
     {
         // arrange 
-        var serializer = new ValueArraySerializer<int>();
+        var serializer = RaccSerializer.GetValueArraySerializer<int>();
         var ms = new MemoryStream([
             ..BitConverter.GetBytes(6),
             ..BitConverter.GetBytes(0),
@@ -197,7 +197,7 @@ public class ValueArraySerializerTest
     public void DeserializeLongArray()
     {
         // arrange 
-        var serializer = new ValueArraySerializer<long>();
+        var serializer = RaccSerializer.GetValueArraySerializer<long>();
         var ms = new MemoryStream([
             ..BitConverter.GetBytes(6),
             ..BitConverter.GetBytes((long)0),

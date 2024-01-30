@@ -28,18 +28,33 @@ public static class RaccSerializer
         return Serializers.GetOrAdd(type, MakeSerializer);
     }
 
-    public static ISerializer GetListSerializer<T>() => GetListSerializer(typeof(T));
+    public static ListSerializer<T> GetListSerializer<T>() => (ListSerializer<T>)GetListSerializer(typeof(T));
 
     public static ISerializer GetListSerializer(Type t) => GetSerializer(typeof(List<>).MakeGenericType(t));
 
-    public static ISerializer GetListSerializer<TElement, TCollector>() => GetListSerializer(typeof(TElement), typeof(TCollector));
+    public static ListSerializerWithCollector<TElement, TCollector> GetListSerializer<TElement, TCollector>() where TElement : TCollector =>
+        (ListSerializerWithCollector<TElement, TCollector>)GetListSerializer(typeof(TElement), typeof(TCollector));
+    
+
+    public static DictionarySerializer<TKey, TValue> GetDictionarySerializer<TKey, TValue>()
+        where TKey : notnull where TValue : notnull => (DictionarySerializer<TKey, TValue>)GetSerializer<Dictionary<TKey, TValue>>();
+
+    public static HashSetSerializer<T> GetHashSetSerializer<T>()
+        where T : notnull => (HashSetSerializer<T>)GetSerializer<HashSet<T>>();
+
+    public static ValueArraySerializer<T> GetValueArraySerializer<T>()
+        where T : unmanaged
+        => (ValueArraySerializer<T>)GetSerializer<T[]>();
+
+    public static ClassSerializer<T> GetClassSerializer<T>() where T : class => (ClassSerializer<T>)GetSerializer<T>();
+
 
     public static ISerializer GetListSerializer(Type elementType, Type collectorType)
     {
         return ConstructSerializer(typeof(ListSerializerWithCollector<,>), elementType, collectorType);
     }
 
-    public static ISerializer GetTypedDictionarySerializer<T>() => GetTypedDictionarySerializer(typeof(T));
+    public static TypedDictionarySerializer<T> GetTypedDictionarySerializer<T>() => (TypedDictionarySerializer<T>)GetTypedDictionarySerializer(typeof(T));
 
     public static ISerializer GetTypedDictionarySerializer(Type t)
     {
@@ -101,7 +116,7 @@ public interface ISerializer
     Type SerializedType { get; }
 }
 
-public class TypedDictionarySerializer<T> : ISerializer
+public readonly struct TypedDictionarySerializer<T> : ISerializer
 {
     private readonly Dictionary<string, (ISerializer serializer, PropertyInfo propertyInfo)> _serializers = [];
     private readonly StringSerializer _stringSerializer = new();
@@ -152,13 +167,17 @@ public class TypedDictionarySerializer<T> : ISerializer
     public Type SerializedType { get; } = typeof(Dictionary<PropertyInfo, object>);
 }
 
-public class DictionarySerializer<TKey, TValue> : ISerializer
+public readonly struct DictionarySerializer<TKey, TValue> : ISerializer
     where TKey : notnull
     where TValue : notnull
 {
     private readonly ValueSerializer<int> _intSerializer = new();
     private readonly ISerializer _keySerializer = RaccSerializer.GetSerializer<TKey>();
     private readonly ISerializer _valueSerializer = RaccSerializer.GetSerializer<TValue>();
+
+    public DictionarySerializer()
+    {
+    }
 
     public Dictionary<TKey, TValue> Deserialize(Stream stream)
     {
@@ -197,10 +216,14 @@ public class DictionarySerializer<TKey, TValue> : ISerializer
     public Type SerializedType { get; } = typeof(Dictionary<TKey, TValue>);
 }
 
-public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
+public readonly struct HashSetSerializer<TElement> : ISerializer where TElement : notnull
 {
     private readonly ValueSerializer<int> _intSerializer = new();
     private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
+
+    public HashSetSerializer()
+    {
+    }
 
     public HashSet<TElement> Deserialize(Stream stream)
     {
@@ -237,11 +260,15 @@ public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
     public Type SerializedType { get; } = typeof(HashSet<TElement>);
 }
 
-public class ListSerializerWithCollector<TElement, TCollector> : ISerializer
+public readonly struct ListSerializerWithCollector<TElement, TCollector> : ISerializer
     where TElement : TCollector
 {
     private readonly ValueSerializer<int> _intSerializer = new();
     private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
+
+    public ListSerializerWithCollector()
+    {
+    }
 
     public List<TCollector> Deserialize(Stream stream)
     {
@@ -278,9 +305,28 @@ public class ListSerializerWithCollector<TElement, TCollector> : ISerializer
     public Type SerializedType { get; } = typeof(List<>).MakeGenericType(typeof(TCollector));
 }
 
-public class ListSerializer<TElement> : ListSerializerWithCollector<TElement, TElement>;
+public readonly struct ListSerializer<TElement> : ISerializer
+{
+    private readonly ListSerializerWithCollector<TElement, TElement> _serializer = new ListSerializerWithCollector<TElement, TElement>();
 
-public unsafe class ValueSerializer<T> : ISerializer
+    public ListSerializer()
+    {
+    }
+
+    public object Deserialize(Stream stream)
+    {
+        return ((ISerializer)_serializer).Deserialize(stream);
+    }
+
+    public void Serialize(Stream stream, object o)
+    {
+        ((ISerializer)_serializer).Serialize(stream, o);
+    }
+
+    public Type SerializedType => _serializer.SerializedType;
+}
+
+public unsafe readonly struct ValueSerializer<T> : ISerializer
     where T : unmanaged
 {
     private readonly int _size = sizeof(T);
@@ -288,6 +334,10 @@ public unsafe class ValueSerializer<T> : ISerializer
     static ValueSerializer()
     {
         Debug.Assert(!RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+    }
+
+    public ValueSerializer()
+    {
     }
 
     public T Deserialize(Stream stream)
@@ -315,7 +365,7 @@ public unsafe class ValueSerializer<T> : ISerializer
     public Type SerializedType { get; } = typeof(T);
 }
 
-public class ClassSerializer<T> : ISerializer
+public readonly struct ClassSerializer<T> : ISerializer
     where T : class
 {
     private readonly Action<Stream, T> _serializer;
@@ -328,7 +378,7 @@ public class ClassSerializer<T> : ISerializer
 
         var tParam = Expression.Parameter(typeof(T), "t");
         var streamParam = Expression.Parameter(typeof(Stream), "stream");
-        
+
 
         foreach (var propertyInfo in typeof(T).GetProperties())
         {
@@ -374,9 +424,13 @@ public class ClassSerializer<T> : ISerializer
     public Type SerializedType { get; } = typeof(T);
 }
 
-public class StringSerializer : ISerializer
+public readonly struct StringSerializer : ISerializer
 {
     private readonly ByteSpanSerializer _byteArraySerializer = new();
+
+    public StringSerializer()
+    {
+    }
 
     public string Deserialize(Stream stream)
     {
@@ -403,9 +457,13 @@ public class StringSerializer : ISerializer
     public Type SerializedType { get; } = typeof(string);
 }
 
-internal class ByteSpanSerializer
+internal readonly struct ByteSpanSerializer
 {
     private readonly ValueSerializer<int> _intSerializer = new();
+
+    public ByteSpanSerializer()
+    {
+    }
 
     public Span<byte> Deserialize(Stream stream)
     {
@@ -424,13 +482,17 @@ internal class ByteSpanSerializer
     }
 }
 
-public class ValueArraySerializer<T> : ISerializer where T : unmanaged
+public readonly struct ValueArraySerializer<T> : ISerializer where T : unmanaged
 {
     private readonly ValueSerializer<int> _intSerializer = new();
 
     static ValueArraySerializer()
     {
         Debug.Assert(typeof(T).IsValueType);
+    }
+
+    public ValueArraySerializer()
+    {
     }
 
     public T[] Deserialize(Stream stream)

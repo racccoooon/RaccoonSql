@@ -11,7 +11,7 @@ public class HashSetSerializerTest
     {
         // arrange
         HashSet<string> hashSet = ["Geld", "Cuteness", "Coolness"];
-        var serializer = new HashSetSerializer<string>();
+        var serializer = RaccSerializer.GetHashSetSerializer<string>();
         var ms = new MemoryStream();
 
         // act
@@ -28,7 +28,7 @@ public class HashSetSerializerTest
     {
         // arrange
         HashSet<int> hashSet = [2, 3, 5];
-        var serializer = new HashSetSerializer<int>();
+        var serializer = RaccSerializer.GetHashSetSerializer<int>();
         var ms = new MemoryStream();
 
         // act
@@ -56,7 +56,7 @@ public class HashSetSerializerTest
             new Raccoon {Name = "Gertlinde", Cuteness=83, Floofiness = 2500},
             new Raccoon {Name = "Franziskus", Cuteness=66, Floofiness = 50},
         ];
-        var serializer = new HashSetSerializer<Raccoon>();
+        var serializer = RaccSerializer.GetHashSetSerializer<Raccoon>();
         var ms = new MemoryStream();
 
         // act
