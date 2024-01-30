@@ -96,6 +96,58 @@ public interface ISerializer
 {
     object Deserialize(Stream stream);
     void Serialize(Stream stream, object o);
+    Type SerializedType { get; }
+}
+
+public class TypedDictionarySerializer<T> : ISerializer
+{
+    private readonly Dictionary<string, (ISerializer serializer, PropertyInfo propertyInfo)> _serializers = [];
+    private readonly StringSerializer _stringSerializer = new();
+    private readonly ValueSerializer<int> _intSerializer = new();
+
+    public TypedDictionarySerializer()
+    {
+        foreach (var propertyInfo in typeof(T).GetProperties())
+        {
+            var serializer = RaccSerializer.GetSerializer(propertyInfo.PropertyType);
+            _serializers[propertyInfo.Name] = (serializer, propertyInfo);
+        }
+    }
+
+    public Dictionary<PropertyInfo, object> Deserialize(Stream stream)
+    {
+        var result = new Dictionary<PropertyInfo, object>();
+        var count = _intSerializer.Deserialize(stream);
+        for (var i = 0; i < count; i++)
+        {
+            var name = _stringSerializer.Deserialize(stream);
+            var value = _serializers[name].serializer.Deserialize(stream);
+            result[_serializers[name].propertyInfo] = value;
+        }
+        return result;
+    }
+
+    object ISerializer.Deserialize(Stream stream)
+    {
+        return Deserialize(stream);
+    }
+
+    public void Serialize(Stream stream, Dictionary<PropertyInfo, object> dict)
+    {
+        _intSerializer.Serialize(stream, dict.Count);
+        foreach (var (key, value) in dict)
+        {
+            _stringSerializer.Serialize(stream, key.Name);
+            _serializers[key.Name].serializer.Serialize(stream, value);
+        }
+    }
+
+    void ISerializer.Serialize(Stream stream, object o)
+    {
+        Serialize(stream, (Dictionary<PropertyInfo, object>)o);
+    }
+
+    public Type SerializedType { get; } = typeof(Dictionary<PropertyInfo, object>);
 }
 
 public class DictionarySerializer<TKey, TValue> : ISerializer
