@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -56,7 +57,6 @@ public static class RaccSerializer
         return serializer.Deserialize(stream);
     }
     
-    
     private static ISerializer ConstructSerializer(Type serializerType, params Type[] typeArgs)
     {
         return (ISerializer)serializerType
@@ -81,7 +81,6 @@ public static class RaccSerializer
         {
             return ConstructSerializer(serializerType, type.GenericTypeArguments);
         }
-
 
         if (type.IsClass)
         {
@@ -191,6 +190,8 @@ public class DictionarySerializer<TKey, TValue> : ISerializer
     {
         Serialize(stream, (Dictionary<TKey, TValue>)o);
     }
+
+    public Type SerializedType { get; } = typeof(Dictionary<TKey, TValue>);
 }
 
 public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
@@ -229,6 +230,8 @@ public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
     {
         Serialize(stream, (HashSet<TElement>)o);
     }
+
+    public Type SerializedType { get; } = typeof(HashSet<TElement>);
 }
 
 public class ListSerializerWithCollector<TElement, TCollector> : ISerializer
@@ -268,6 +271,8 @@ public class ListSerializerWithCollector<TElement, TCollector> : ISerializer
     {
         Serialize(stream, (List<TCollector>)o);
     }
+
+    public Type SerializedType { get; } = typeof(List<>).MakeGenericType(typeof(TCollector));
 }
 
 public class ListSerializer<TElement> : ListSerializerWithCollector<TElement, TElement>;
@@ -303,6 +308,8 @@ public unsafe class ValueSerializer<T> : ISerializer
     {
         Serialize(stream, (T)o);
     }
+
+    public Type SerializedType { get; } = typeof(T);
 }
 
 public class ClassSerializer<T> : ISerializer
@@ -358,6 +365,8 @@ public class ClassSerializer<T> : ISerializer
     {
         Serialize(stream, (T)o);
     }
+
+    public Type SerializedType { get; } = typeof(T);
 }
 
 public class StringSerializer : ISerializer
