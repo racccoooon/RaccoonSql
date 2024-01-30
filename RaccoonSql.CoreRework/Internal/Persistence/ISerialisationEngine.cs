@@ -52,12 +52,12 @@ internal class SerialisationEngine : ISerialisationEngine
 
     public ChunkData<TModel> DeserializeChunkData<TModel>(Stream stream) where TModel : ModelBase
     {
-        return (ChunkData<TModel>)JsonSerializer.Deserialize(stream, typeof(ChunkData<TModel>))!;
+        return RaccSerializer.Deserialize<ChunkData<TModel>>(stream);
     }
 
     public TModel DeserializeModel<TModel>(Stream stream) where TModel : ModelBase
     {
-        return (TModel)JsonSerializer.Deserialize(stream, typeof(TModel))!;
+        return RaccSerializer.Deserialize<TModel>(stream);
     }
 
     public void SerializeStoreMetadata(Stream stream, ModelStoreMetadata metadata)
@@ -74,14 +74,12 @@ internal class SerialisationEngine : ISerialisationEngine
 
     public void SerializeChunkData<TModel>(Stream stream, ChunkData<TModel> getData) where TModel : ModelBase
     {
-        var utf8JsonWriter = new Utf8JsonWriter(stream);
-        JsonSerializer.Serialize(utf8JsonWriter, getData);
+        RaccSerializer.Serialize(stream, getData);
     }
 
     public void SerializeModel<TModel>(Stream stream, TModel model) where TModel : ModelBase
     {
-        var utf8JsonWriter = new Utf8JsonWriter(stream);
-        JsonSerializer.Serialize(utf8JsonWriter, model);
+        RaccSerializer.Serialize(stream, model);
     }
 
     public void SerializeWal(Stream stream, CommitChanges commitChanges)
