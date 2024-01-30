@@ -163,7 +163,7 @@ public class HashSetSerializer<TElement> : ISerializer where TElement : notnull
 public class ListSerializerWithCollector<TElement, TCollector> : ISerializer
     where TElement : TCollector
 {
-    private readonly PrimitiveSerializer<int> _intSerializer = new();
+    private readonly ValueSerializer<int> _intSerializer = new();
     private readonly ISerializer _elementSerializer = RaccSerializer.GetSerializer<TElement>();
 
     public List<TCollector> Deserialize(Stream stream)
