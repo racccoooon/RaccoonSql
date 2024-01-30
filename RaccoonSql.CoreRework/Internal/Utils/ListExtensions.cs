@@ -2,11 +2,6 @@ namespace RaccoonSql.CoreRework.Internal.Utils;
 
 public static class ListExtensions
 {
-    public static IList<TTo> CastList<TFrom, TTo>(this IList<TFrom> list)
-    {
-        return new CastedList<TTo, TFrom>(list);
-    }
-    
     public static List<List<T>> CrossProduct<T>(this IEnumerable<IReadOnlyList<T>> terms)
     {
         List<List<T>> crossProduct = [[]];
