@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 
 namespace RaccoonSql.CoreRework.Serializer;
@@ -28,6 +30,8 @@ public class Thonk
 {
     private ThonkKind _kind;
     private object _primitiveValue;
+    private List<Thonk> _listValues; // for array, list and hashset
+    private List<(Thonk, Thonk)> _dictValues;
     private List<(string Name, Thonk Value)> _properties;
     private Dictionary<string, Thonk> _propertiesDictionary;
 
@@ -35,15 +39,27 @@ public class Thonk
 
     public object As(Type type)
     {
-        if (!IsCompatibleWith(type))
-        {
-            throw new WrongThonkException($"This Thonk is not compatible with type {type}");
-        }
+        EnsureCompatibleWith(type);
 
         switch (_kind)
         {
             case ThonkKind.Primitive:
                 return _primitiveValue;
+            case ThonkKind.Array:
+                return AsArray(type.GetElementType()!);
+            case ThonkKind.List:
+            {
+                return AsList(type.GenericTypeArguments[0]);
+            }
+            case ThonkKind.HashSet:
+            {
+                return AsHashSet(type.GenericTypeArguments[0]);
+            }
+            case ThonkKind.Dictionary:
+            {
+                return AsDictionary(type.GenericTypeArguments[0], type.GenericTypeArguments[1]);
+            }
+
             case ThonkKind.SomethingLikeAClass:
             {
                 var obj = RuntimeHelpers.GetUninitializedObject(type);
@@ -62,12 +78,90 @@ public class Thonk
 
     }
 
+    public T[] AsArray<T>()
+    {
+        EnsureCompatibleWith<T[]>();
+        var arr = new T[_listValues.Count];
+
+        for (var i = 0; i < _listValues.Count; i++)
+        {
+            arr[i] = _listValues[i].As<T>();
+        }
+        return arr;
+    }
+
+    public List<T> AsList<T>()
+    {
+        EnsureCompatibleWith<List<T>>();
+        var list = new List<T>(_listValues.Count);
+        foreach (var listValue in _listValues)
+        {
+            list.Add(listValue.As<T>());
+        }
+        return list;
+    }
+
+    public HashSet<T> AsHashSet<T>()
+    {
+        EnsureCompatibleWith<HashSet<T>>();
+        var hashset = new HashSet<T>(_listValues.Count);
+        foreach (var listValue in _listValues)
+        {
+            hashset.Add(listValue.As<T>());
+        }
+        return hashset;
+    }
+
+    public Dictionary<TKey, TValue> AsDictionary<TKey, TValue>() where TKey : notnull
+    {
+        EnsureCompatibleWith<Dictionary<TKey, TValue>>();
+        var dict = new Dictionary<TKey, TValue>(_dictValues.Count);
+        foreach (var (keyThonk, valueThonk) in _dictValues)
+        {
+            dict.Add(keyThonk.As<TKey>(), valueThonk.As<TValue>());
+        }
+        return dict;
+    }
+
+    private object AsArray(Type elementType)
+    {
+        return typeof(Thonk)
+            .GetMethod(nameof(AsArray), 1, [])!
+            .MakeGenericMethod([elementType])
+            .Invoke(this, [])!;
+    }
+
+    private object AsList(Type elementType)
+    {
+        return typeof(Thonk)
+            .GetMethod(nameof(AsList), 1, [])!
+            .MakeGenericMethod([elementType])
+            .Invoke(this, [])!;
+    }
+
+    private object AsHashSet(Type elementType)
+    {
+        return typeof(Thonk)
+            .GetMethod(nameof(AsHashSet), 1, [])!
+            .MakeGenericMethod([elementType])
+            .Invoke(this, [])!;
+    }
+
+    private object AsDictionary(Type keyType, Type valueType)
+    {
+        return typeof(Thonk)
+            .GetMethod(nameof(AsDictionary), 2, [])!
+            .MakeGenericMethod([keyType, valueType])
+            .Invoke(this, [])!;
+    }
+
     public bool IsCompatibleWith<T>() => IsCompatibleWith(typeof(T));
 
     public bool IsCompatibleWith(Type type)
     {
         switch (_kind)
         {
+            // TODO 
             case ThonkKind.Primitive:
                 return _primitiveValue.GetType().IsAssignableTo(type);
             case ThonkKind.SomethingLikeAClass when !type.IsClass:
@@ -82,6 +176,16 @@ public class Thonk
                 throw new UnreachableException();
         }
 
+    }
+
+    private void EnsureCompatibleWith<T>() => EnsureCompatibleWith(typeof(T));
+
+    private void EnsureCompatibleWith(Type type)
+    {
+        if (!IsCompatibleWith(type))
+        {
+            throw new WrongThonkException($"This Thonk is not compatible with type {type}");
+        }
     }
 
     private void EnsureClassLike()
@@ -213,7 +317,6 @@ public class Thonk
 
     }
 }
-
 
 public readonly struct ThonkSerializer : ISerializer
 {
