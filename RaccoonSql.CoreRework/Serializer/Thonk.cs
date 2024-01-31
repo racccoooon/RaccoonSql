@@ -8,7 +8,6 @@ namespace RaccoonSql.CoreRework.Serializer;
 
 enum ThonkKind
 {
-    // TODO: what about special stuff like Lists and Dictionaries? => they get their own ThonkKind each, and the ThonkSchema gets their type params as ThonkSchemas
     Primitive,
     Array,
     List,
@@ -28,6 +27,7 @@ public class ThonkSchema
 
 public class Thonk
 {
+    // TODO: a thonk should be able to contain null, but how to represent that?
     private ThonkKind _kind;
     private object _primitiveValue;
     private List<Thonk> _listValues; // for array, list and hashset
@@ -123,6 +123,31 @@ public class Thonk
         return dict;
     }
 
+    public Thonk[] AsArray()
+    {
+        EnsureCompatibleWith<object[]>();
+        return _listValues.ToArray();
+    }
+
+    public List<Thonk> AsList()
+    {
+        EnsureCompatibleWith<List<object>>();
+        return _listValues.ToList();
+    }
+
+    public HashSet<Thonk> AsHashSet()
+    {
+        EnsureCompatibleWith<HashSet<object>>();
+        return _listValues.ToHashSet();
+    }
+
+    public Dictionary<Thonk, Thonk> AsDictionary()
+    {
+        EnsureCompatibleWith<Dictionary<object, object>>();
+        return
+            _dictValues.ToDictionary(); // TODO: for this to work `Thonk` needs to be comparable and hashable based on its content. this might be very difficult
+    }
+
     private object AsArray(Type elementType)
     {
         return typeof(Thonk)
@@ -164,6 +189,19 @@ public class Thonk
             // TODO 
             case ThonkKind.Primitive:
                 return _primitiveValue.GetType().IsAssignableTo(type);
+            case ThonkKind.Array when !type.IsArray: return false;
+            case ThonkKind.Array:
+                return _listValues.Count == 0 || _listValues[0].IsCompatibleWith(type.GetElementType()!);
+            case ThonkKind.List when !(type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)): return false;
+            case ThonkKind.List:
+                return _listValues.Count == 0 || _listValues[0].IsCompatibleWith(type.GenericTypeArguments[0]);
+            case ThonkKind.HashSet when !(type.IsGenericType && type.GetGenericTypeDefinition() == typeof(HashSet<>)): return false;
+            case ThonkKind.HashSet:
+                return _listValues.Count == 0 || _listValues[0].IsCompatibleWith(type.GenericTypeArguments[0]);
+            case ThonkKind.Dictionary when !(type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>)): return false;
+            case ThonkKind.Dictionary:
+                return _dictValues.Count == 0 || (_dictValues[0].Item1.IsCompatibleWith(type.GenericTypeArguments[0])
+                                                  && _dictValues[1].Item1.IsCompatibleWith(type.GenericTypeArguments[0]));
             case ThonkKind.SomethingLikeAClass when !type.IsClass:
                 return false;
             case ThonkKind.SomethingLikeAClass:
