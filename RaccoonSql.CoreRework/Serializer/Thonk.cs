@@ -14,7 +14,10 @@ public enum ThonkKind
     HashSet,
     Dictionary,
     Class,
+    Unknown,
 }
+
+
 
 public class ThonkSchema
 {
@@ -34,9 +37,9 @@ public class ThonkSchema
     public bool IsClass => _kind == ThonkKind.Class;
 
 
-    public ThonkSchema ForType<T>() => ForType(typeof(T));
+    public static ThonkSchema ForType<T>() => ForType(typeof(T));
 
-    public ThonkSchema ForType(Type type)
+    public static ThonkSchema ForType(Type type)
     {
         if (type.IsArray)
         {
@@ -88,7 +91,69 @@ public class ThonkSchema
         throw new WrongThonkException($"Can not make a ThonkSchema from type {type}");
     }
 
-
+    public static ThonkSchema Unknown()
+    {
+        return new ThonkSchema { _kind = ThonkKind.Unknown };
+    }
+    
+    public static ThonkSchema ForThonk(Thonk thonk)
+    {
+        var schema = new ThonkSchema
+        {
+            _kind = thonk.Kind,
+        };
+        switch (thonk.Kind)
+        {
+            case ThonkKind.Primitive:
+                schema._primitiveType = thonk.AsPrimitive().GetType();
+                break;
+            case ThonkKind.Array:
+            {
+                var array = thonk.AsArray();
+                schema._typeParams = [array.Length == 0 ? Unknown() : array[0].GetSchema()];
+                break;
+            }
+            case ThonkKind.List:
+            {
+                var list = thonk.AsList();
+                schema._typeParams = [list.Count == 0 ? Unknown() : list[0].GetSchema()];
+                break;
+            }
+            case ThonkKind.HashSet:
+            {
+                var hashset = thonk.AsHashSet();
+                schema._typeParams = [hashset.Count == 0 ? Unknown() : hashset.First().GetSchema()];
+                break;
+            }
+            case ThonkKind.Dictionary:
+            {
+                var dictionary = thonk.AsDictionary();
+                if (dictionary.Count == 0)
+                {
+                    schema._typeParams = [Unknown(), Unknown()];
+                }
+                else
+                {
+                    var first = dictionary.First();
+                    schema._typeParams = [first.Key.GetSchema(), first.Value.GetSchema()];
+                }
+                break;
+            }
+            case ThonkKind.Class:
+                foreach (var (name, value) in thonk.EnumerateProperties())
+                {
+                    var valueSchema = value.GetSchema();
+                    schema._properties.Add((name, valueSchema));
+                    schema._propertyDictionary[name] = valueSchema;
+                }
+                break;
+            default:
+                throw new UnreachableException();
+        }
+        return schema;
+    }
+    
+    
     public Type? PrimitiveType => IsPrimitive ? _primitiveType : null;
     public ThonkSchema? ArrayElementType => IsArray ? _typeParams[0] : null;
     public ThonkSchema? ListType => IsArray ? _typeParams[0] : null;
@@ -100,29 +165,37 @@ public class ThonkSchema
     
     public ThonkSchema? Property(string name) => !IsClass ? null : _propertyDictionary.GetValueOrDefault(name);
 
+    
+    
+    private void EnsureClassLike()
+    {
+        if (_kind != ThonkKind.Class) throw new WrongThonkException("This ThonkSchema is not a class-like ThonkSchema");
+    }
+    
     public void RenameProperty(string name, string newName)
     {
-
+        EnsureClassLike();
+        // TODO: ugh this is just gonna be duplicating the thonk code, how gross
     }
 
     public void MoveProperty(string name, int position)
     {
-
+        EnsureClassLike();
     }
 
     public void RemoveProperty(string name)
     {
-
+        EnsureClassLike();
     }
 
     public void AddProperty(string name, ThonkSchema newSchema)
     {
-
+        EnsureClassLike();
     }
 
     public void ChangeProperty(string name, ThonkSchema newSchema)
     {
-
+        EnsureClassLike();
     }
 
 
@@ -136,7 +209,17 @@ public class Thonk
     private List<(Thonk, Thonk)> _dictValues;
     private List<(string Name, Thonk Value)> _properties;
     private Dictionary<string, Thonk> _propertiesDictionary;
+    
+    public ThonkKind Kind => _kind;
 
+    public bool IsPrimitive => _kind == ThonkKind.Primitive;
+    public bool IsArray => _kind == ThonkKind.Array;
+    public bool IsList => _kind == ThonkKind.List;
+    public bool IsHashSet => _kind == ThonkKind.HashSet;
+    public bool IsDictionary => _kind == ThonkKind.Dictionary;
+    public bool IsClass => _kind == ThonkKind.Class;
+    
+    
     private static Thonk MakeArray(Type type, object value)
     {
         return (Thonk)typeof(Thonk).GetMethod(nameof(MakeArray), 1, [type.MakeArrayType()])!
@@ -307,6 +390,18 @@ public class Thonk
 
     }
 
+    public object AsPrimitive()
+    {
+        EnsurePrimitive();
+        return _primitiveValue;
+    }
+
+    public T AsPrimitive<T>()
+    {
+        EnsureCompatibleWith<T>();
+        return (T)_primitiveValue;
+    }
+
     public T[] AsArray<T>()
     {
         EnsureCompatibleWith<T[]>();
@@ -380,7 +475,7 @@ public class Thonk
     public Dictionary<Thonk, Thonk> AsDictionary()
     {
         EnsureCompatibleWith<Dictionary<object, object>>();
-        // TODO: for this to work `Thonk` needs to be comparable and hashed based on its content. this might be very difficult?
+        // TODO: for this to work `Thonk` needs to be comparable and hashed based on its content.
         return _dictValues.ToDictionary();
     }
 
@@ -422,7 +517,6 @@ public class Thonk
     {
         switch (_kind)
         {
-            // TODO 
             case ThonkKind.Primitive:
                 return _primitiveValue.GetType().IsAssignableTo(type);
             case ThonkKind.Array when !type.IsArray: return false;
@@ -465,6 +559,11 @@ public class Thonk
     private void EnsureClassLike()
     {
         if (_kind != ThonkKind.Class) throw new WrongThonkException("This Thonk is not a class-like Thonk");
+    }
+
+    private void EnsurePrimitive()
+    {
+        if (_kind != ThonkKind.Primitive) throw new WrongThonkException("This Thonk is not a primitive Thonk");
     }
 
     public IEnumerable<(string Name, Thonk Value)> EnumerateProperties()
@@ -641,7 +740,7 @@ public class Thonk
 
     public ThonkSchema GetSchema()
     {
-        // TODO
+        return ThonkSchema.ForThonk(this);
     }
 
     public static Thonk FromThonks(Thonk[] items)
@@ -939,9 +1038,4 @@ public readonly struct ThonkClassSerializer : ISerializer
     public Type SerializedType => typeof(Thonk);
 }
 
-public class WrongThonkException : Exception
-{
-    public WrongThonkException(string msg) : base(msg)
-    {
-    }
-}
+public class WrongThonkException(string msg) : Exception(msg);
